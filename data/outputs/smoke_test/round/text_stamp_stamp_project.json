@@ -1,0 +1,20 @@
+{
+  "name": "text_stamp",
+  "product_mode": "stamp",
+  "base_diameter_mm": 105.0,
+  "base_shape": "round",
+  "base_rect_width_mm": null,
+  "base_rect_height_mm": null,
+  "layout_mode": "separate",
+  "base_rect_size_mm": null,
+  "base_thickness_mm": 0.7,
+  "height_mm": 6.5,
+  "line_width_mm": 0.45,
+  "font_choice": "classic",
+  "objects": [
+    "Base",
+    "Relief",
+    "Heart"
+  ],
+  "note": "3MF содержит отдельные объекты. Можно двигать и масштабировать в слайсере."
+}
