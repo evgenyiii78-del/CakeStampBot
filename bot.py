@@ -149,6 +149,30 @@ async def send_project_menu(message):
     )
 
 
+
+def format_base_size(value) -> str:
+    raw = str(value or "105").replace("x", "×")
+    try:
+        return f"{int(float(raw))} мм"
+    except ValueError:
+        return f"{raw} мм"
+
+
+async def show_summary_for_create(message, context: ContextTypes.DEFAULT_TYPE):
+    await message.reply_text(
+        summary_text(context.user_data),
+        reply_markup=create_keyboard(),
+    )
+
+
+def should_ask_heart(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return context.user_data.get("product_mode") in ("stamp", "topper")
+
+
+def should_ask_layout(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return context.user_data.get("product_mode") == "stamp"
+
+
 def summary_text(params: dict[str, Any]) -> str:
     source = "Текст" if params.get("source") == "text" else "Картинка"
     mode_map = {
@@ -167,7 +191,7 @@ def summary_text(params: dict[str, Any]) -> str:
         "",
         f"Источник: {source}",
         f"Режим: {mode}",
-        f"Размер: {int(float(params.get('base_diameter', 105)))} мм",
+        f"Размер: {format_base_size(params.get('base_diameter', 105))}",
     ]
 
     if params.get("product_mode") == "stamp":
@@ -178,6 +202,10 @@ def summary_text(params: dict[str, Any]) -> str:
         f"Сердечко: {heart}",
         f"Шрифт: {font if source == 'Текст' else '-'}",
     ])
+
+    if params.get("product_mode") == "stamp":
+        layout = params.get("layout_mode", "separate")
+        parts.append(f"Раскладка: {'собрать на подложке' if layout == 'assembled' else 'отдельные объекты'}")
 
     return "\n".join(parts)
 
@@ -226,7 +254,7 @@ def line_width_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "🍰 CakeStampBot v0.7.2.2.1\n\n"
+        "🍰 CakeStampBot v0.7.3\n\n"
         "Главное меню всегда внизу — команды вручную вводить не нужно.\n\n"
         "Можно сделать:\n"
         "• штамп для крема\n"
@@ -240,7 +268,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Помощь по CakeStampBot v0.7.2.2.1\n\n"
+        "Помощь по CakeStampBot v0.7.3\n\n"
         "Кнопки внизу:\n"
         "🍰 Новый проект — начать заново\n"
         "✍️ Текст — модель из текста\n"
@@ -282,28 +310,6 @@ async def stamp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Выбери тип изделия:",
         reply_markup=mode_keyboard(),
-    )
-
-
-async def _generate_preview_and_confirm(message, context: ContextTypes.DEFAULT_TYPE):
-    """Generate preview and show confirmation dialog."""
-    params = context.user_data
-    
-    # Simple preview text for now
-    preview = summary_text(params)
-    
-    await message.edit_text(
-        f"{preview}\n\n✅ Всё готово к созданию 3MF?",
-        reply_markup=final_preview_keyboard(),
-    )
-
-
-async def _send_last_result(message, context: ContextTypes.DEFAULT_TYPE):
-    """Send the last generated result."""
-    # This would need to store the result from generation
-    # For now, just acknowledge
-    await message.edit_text(
-        "Готовится файл...",
     )
 
 
@@ -356,7 +362,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data.startswith("size:"):
-        context.user_data["base_diameter"] = float(data.split(":")[1])
+        context.user_data["base_diameter"] = data.split(":")[1]
 
         if context.user_data.get("product_mode") == "stamp":
             await query.edit_message_text(
@@ -377,91 +383,78 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if base_shape == "rect":
             await query.edit_message_text(
-                "Форма подложки: прямоугольная.\n\nВыбери размер прямоугольника:",
+                "Форма подложки: прямоугольная.\n\n"
+                "Выбери размер прямоугольника:",
                 reply_markup=rect_size_keyboard(),
             )
             return
 
-        context.user_data["base_size_value"] = str(int(context.user_data.get("size", 105)))
-        mode = context.user_data.get("mode", "stamp")
-        if mode == "text":
-            await query.edit_message_text(
-                "Форма подложки: круглая.\n\nТеперь выбери толщину линии:",
-                reply_markup=line_width_keyboard(),
-            )
-        else:
-            await query.edit_message_text(
-                "Форма подложки: круглая.\n\nТеперь выбери, нужно ли сердечко:",
-                reply_markup=heart_keyboard(),
-            )
+        await query.edit_message_text(
+            "Форма подложки: круглая.\n\n"
+            "Теперь выбери толщину линии:",
+            reply_markup=width_keyboard(),
+        )
         return
 
     if data.startswith("rectsize:"):
         rect_size = data.split(":")[1]
-        context.user_data["base_size_value"] = rect_size
+        context.user_data["base_diameter"] = rect_size
         context.user_data["base_shape"] = "rect"
-        mode = context.user_data.get("mode", "stamp")
-        if mode == "text":
-            await query.edit_message_text(
-                f"Размер прямоугольника: {rect_size.replace('x', '×')} мм.\n\nТеперь выбери толщину линии:",
-                reply_markup=line_width_keyboard(),
-            )
-        else:
-            await query.edit_message_text(
-                f"Размер прямоугольника: {rect_size.replace('x', '×')} мм.\n\nТеперь выбери, нужно ли сердечко:",
-                reply_markup=heart_keyboard(),
-            )
+
+        await query.edit_message_text(
+            f"Размер прямоугольника: {rect_size.replace('x', '×')} мм.\n\n"
+            "Теперь выбери толщину линии:",
+            reply_markup=width_keyboard(),
+        )
         return
 
     if data.startswith("width:"):
         context.user_data["line_width"] = float(data.split(":")[1])
+
+        if should_ask_heart(context):
+            await query.edit_message_text(
+                f"Толщина линии: {context.user_data['line_width']} мм.\n\n"
+                "Добавить сердечко отдельным объектом?",
+                reply_markup=heart_keyboard(),
+            )
+            return
+
+        context.user_data["add_heart"] = False
+        context.user_data["layout_mode"] = "separate"
         await query.edit_message_text(
-            "Добавить сердечко отдельным объектом?",
-            reply_markup=heart_keyboard(),
+            "Настройки готовы ✅"
         )
+        await show_summary_for_create(query.message, context)
         return
 
     if data.startswith("heart:"):
         add_heart = data.split(":")[1] == "yes"
         context.user_data["add_heart"] = add_heart
 
-        if "line_width" not in context.user_data:
-            # Для режима text - line_width еще не выбран
+        if should_ask_layout(context):
             await query.edit_message_text(
-                f"Сердечко: {'да' if add_heart else 'нет'}.\n\nТеперь выбери толщину линии:",
-                reply_markup=line_width_keyboard(),
+                f"Сердечко: {'да' if add_heart else 'нет'}.\n\n"
+                "Как расположить объекты в 3MF?",
+                reply_markup=layout_keyboard(),
             )
             return
 
-        # Для режима image или когда line_width уже есть
+        context.user_data["layout_mode"] = "separate"
         await query.edit_message_text(
-            f"Сердечко: {'да' if add_heart else 'нет'}.\n\nКак расположить объекты в 3MF?",
-            reply_markup=layout_keyboard(),
+            f"Сердечко: {'да' if add_heart else 'нет'}.\n\n"
+            "Настройки готовы ✅"
         )
+        await show_summary_for_create(query.message, context)
         return
 
     if data.startswith("layout:"):
         layout_mode = data.split(":")[1]
         context.user_data["layout_mode"] = layout_mode
-        await query.edit_message_text(
-            "Настройки готовы. Сейчас покажу предпросмотр перед созданием 3MF..."
-        )
-        try:
-            await _generate_preview_and_confirm(query.message, context)
-        except Exception as e:
-            await query.message.reply_text(
-                "Не получилось сделать предпросмотр.\n\n"
-                f"Ошибка: {e}\n\n"
-                "Попробуй более простой текст или картинку."
-            )
-        return
 
-    if data == "make3mf":
-        await query.edit_message_text("Создаю 3MF-проект...")
-        try:
-            await _send_last_result(query.message, context)
-        except Exception as e:
-            await query.message.reply_text(f"Ошибка отправки файла: {e}")
+        await query.edit_message_text(
+            "Настройки готовы ✅"
+        )
+        await show_summary_for_create(query.message, context)
         return
 
     if data == "restart_settings":
@@ -471,9 +464,16 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Old v0.7 buttons compatibility.
+    if data == "make3mf":
+        await _enqueue_job(query.message, context)
+        return
+
     if data == "create":
         await _enqueue_job(query.message, context)
         return
+
+
 
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -610,11 +610,12 @@ async def cake_worker(app: Application):
                     params["text"],
                     str(out_dir),
                     params.get("product_mode", "stamp"),
-                    float(params.get("base_diameter", 105)),
+                    params.get("base_diameter", 105),
                     float(params.get("line_width", 0.45)),
                     bool(params.get("add_heart", True)),
                     params.get("font_choice", "classic"),
                     base_shape,
+                    params.get("layout_mode", "separate"),
                 )
             else:
                 result = await asyncio.to_thread(
@@ -622,10 +623,11 @@ async def cake_worker(app: Application):
                     params["image_path"],
                     str(out_dir),
                     params.get("product_mode", "stamp"),
-                    float(params.get("base_diameter", 105)),
+                    params.get("base_diameter", 105),
                     float(params.get("line_width", 0.45)),
-                    bool(params.get("add_heart", True)),
+                    bool(params.get("add_heart", False)),
                     base_shape,
+                    params.get("layout_mode", "separate"),
                 )
 
             with open(result.preview_png, "rb") as f:
@@ -692,6 +694,16 @@ async def post_shutdown(app: Application):
         task.cancel()
 
 
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    print("BOT ERROR:", context.error)
+    if isinstance(update, Update) and update.effective_message:
+        await update.effective_message.reply_text(
+            "Произошла ошибка в обработке кнопки. Нажми «🍰 Новый проект» и попробуй заново.",
+            reply_markup=main_menu_keyboard(),
+        )
+
+
 def main():
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
 
@@ -702,10 +714,11 @@ def main():
     app.add_handler(CommandHandler("queue", queue_cmd))
 
     app.add_handler(CallbackQueryHandler(on_callback))
+    app.add_error_handler(error_handler)
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    print("CakeStampBot v0.7.2.2.1 started")
+    print("CakeStampBot v0.7.3 started")
     app.run_polling()
 
 
