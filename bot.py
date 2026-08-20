@@ -173,6 +173,49 @@ def should_ask_layout(context: ContextTypes.DEFAULT_TYPE) -> bool:
     return context.user_data.get("product_mode") == "stamp"
 
 
+
+
+async def go_next_after_core_options(message, context: ContextTypes.DEFAULT_TYPE, prefix: str = ""):
+    """
+    Robust settings flow:
+    - line_width must be selected
+    - heart is asked only once for stamp/topper
+    - layout is asked only once for stamp
+    - then show final summary/create button
+    """
+    if "line_width" not in context.user_data:
+        await message.reply_text(
+            (prefix + "\n\n" if prefix else "") + "Выбери толщину линии:",
+            reply_markup=width_keyboard(),
+        )
+        return
+
+    if should_ask_heart(context) and "add_heart" not in context.user_data:
+        await message.reply_text(
+            (prefix + "\n\n" if prefix else "") + "Добавить сердечко отдельным объектом?",
+            reply_markup=heart_keyboard(),
+        )
+        return
+
+    if not should_ask_heart(context):
+        context.user_data["add_heart"] = False
+
+    if should_ask_layout(context) and "layout_mode" not in context.user_data:
+        await message.reply_text(
+            (prefix + "\n\n" if prefix else "") + "Как расположить объекты в 3MF?",
+            reply_markup=layout_keyboard(),
+        )
+        return
+
+    if not should_ask_layout(context):
+        context.user_data["layout_mode"] = "separate"
+
+    await message.reply_text(
+        (prefix + "\n\n" if prefix else "") + "Настройки готовы ✅"
+    )
+    await show_summary_for_create(message, context)
+
+
 def summary_text(params: dict[str, Any]) -> str:
     source = "Текст" if params.get("source") == "text" else "Картинка"
     mode_map = {
@@ -254,7 +297,7 @@ def line_width_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "🍰 CakeStampBot v0.7.3\n\n"
+        "🍰 CakeStampBot v0.7.4\n\n"
         "Главное меню всегда внизу — команды вручную вводить не нужно.\n\n"
         "Можно сделать:\n"
         "• штамп для крема\n"
@@ -268,7 +311,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Помощь по CakeStampBot v0.7.3\n\n"
+        "Помощь по CakeStampBot v0.7.4\n\n"
         "Кнопки внизу:\n"
         "🍰 Новый проект — начать заново\n"
         "✍️ Текст — модель из текста\n"
@@ -410,51 +453,28 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("width:"):
         context.user_data["line_width"] = float(data.split(":")[1])
-
-        if should_ask_heart(context):
-            await query.edit_message_text(
-                f"Толщина линии: {context.user_data['line_width']} мм.\n\n"
-                "Добавить сердечко отдельным объектом?",
-                reply_markup=heart_keyboard(),
-            )
-            return
-
-        context.user_data["add_heart"] = False
-        context.user_data["layout_mode"] = "separate"
         await query.edit_message_text(
-            "Настройки готовы ✅"
+            f"Толщина линии: {context.user_data['line_width']} мм."
         )
-        await show_summary_for_create(query.message, context)
+        await go_next_after_core_options(query.message, context)
         return
 
     if data.startswith("heart:"):
         add_heart = data.split(":")[1] == "yes"
         context.user_data["add_heart"] = add_heart
-
-        if should_ask_layout(context):
-            await query.edit_message_text(
-                f"Сердечко: {'да' if add_heart else 'нет'}.\n\n"
-                "Как расположить объекты в 3MF?",
-                reply_markup=layout_keyboard(),
-            )
-            return
-
-        context.user_data["layout_mode"] = "separate"
         await query.edit_message_text(
-            f"Сердечко: {'да' if add_heart else 'нет'}.\n\n"
-            "Настройки готовы ✅"
+            f"Сердечко: {'да' if add_heart else 'нет'}."
         )
-        await show_summary_for_create(query.message, context)
+        await go_next_after_core_options(query.message, context)
         return
 
     if data.startswith("layout:"):
         layout_mode = data.split(":")[1]
         context.user_data["layout_mode"] = layout_mode
-
         await query.edit_message_text(
-            "Настройки готовы ✅"
+            f"Раскладка: {'собрать на подложке' if layout_mode == 'assembled' else 'отдельные объекты'}."
         )
-        await show_summary_for_create(query.message, context)
+        await go_next_after_core_options(query.message, context)
         return
 
     if data == "restart_settings":
@@ -581,6 +601,7 @@ async def _enqueue_job(message, context: ContextTypes.DEFAULT_TYPE):
     await message.reply_text(
         "✅ Задача добавлена в очередь.\n\n"
         f"Позиция: {pos}\n"
+        "Если модель сложная, создание 3MF может занять 30–120 секунд.\n"
         "Когда обработка закончится, я пришлю PNG, 3MF и ZIP.",
         reply_markup=main_menu_keyboard(),
     )
@@ -718,7 +739,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    print("CakeStampBot v0.7.3 started")
+    print("CakeStampBot v0.7.4 started")
     app.run_polling()
 
 

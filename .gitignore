@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+
+.env
+data/uploads/
+data/outputs/
+
+*.zip
+*.3mf
+*.stl
+*.png
+
+.DS_Store
+.idea/
+.vscode/
