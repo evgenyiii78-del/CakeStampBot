@@ -60,56 +60,100 @@ def _first_existing(paths: list[str]) -> str | None:
     return None
 
 
+
 def _find_font_path(font_choice: str = "classic") -> str:
-    font_choice = (font_choice or "classic").lower()
+    """
+    Find a usable TTF font. Works on Windows, Linux Docker and common hosting images.
 
-    classic_candidates = [
-        _env_path("CAKESTAMP_FONT_CLASSIC"),
-        r"C:\Windows\Fonts\timesi.ttf",
-        r"C:\Windows\Fonts\georgiai.ttf",
-        r"C:\Windows\Fonts\ariali.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
-        "/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf",
+    Priority:
+    1. Explicit .env variable:
+       CAKESTAMP_FONT_CLASSIC / CAKESTAMP_FONT_COMIC / CAKESTAMP_FONT_GOST
+    2. Common Windows/Linux font locations
+    3. Recursive scan of /usr/share/fonts, /usr/local/share/fonts, /app/fonts
+    """
+    choice = (font_choice or "classic").lower()
+
+    env_map = {
+        "classic": "CAKESTAMP_FONT_CLASSIC",
+        "comic": "CAKESTAMP_FONT_COMIC",
+        "gost": "CAKESTAMP_FONT_GOST",
+    }
+
+    env_name = env_map.get(choice, "CAKESTAMP_FONT_CLASSIC")
+    env_font = os.getenv(env_name) or os.getenv("CAKESTAMP_FONT")
+    if env_font and os.path.exists(env_font):
+        return env_font
+
+    candidates_by_choice = {
+        "classic": [
+            # Linux / Docker
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSerif-Italic.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSerif.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+            # Windows
+            r"C:\Windows\Fonts\timesi.ttf",
+            r"C:\Windows\Fonts\times.ttf",
+            r"C:\Windows\Fonts\arial.ttf",
+            r"C:\Windows\Fonts\ariali.ttf",
+        ],
+        "comic": [
+            r"C:\Windows\Fonts\comic.ttf",
+            r"C:\Windows\Fonts\comicbd.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        ],
+        "gost": [
+            r"C:\Windows\Fonts\GOST type AU.ttf",
+            r"C:\Windows\Fonts\gost type au.ttf",
+            "/app/fonts/GOST-type-AU.ttf",
+            "/app/fonts/GOST type AU.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        ],
+    }
+
+    candidates = candidates_by_choice.get(choice, []) + candidates_by_choice["classic"]
+
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+
+    # Recursive fallback scan. Prefer DejaVu because it supports Cyrillic.
+    search_dirs = [
+        "/usr/share/fonts",
+        "/usr/local/share/fonts",
+        "/app/fonts",
+        os.path.expanduser("~/.fonts"),
+        os.path.expanduser("~/.local/share/fonts"),
     ]
 
-    comic_candidates = [
-        _env_path("CAKESTAMP_FONT_COMIC"),
-        r"C:\Windows\Fonts\comic.ttf",
-        r"C:\Windows\Fonts\comicbd.ttf",
-        r"C:\Windows\Fonts\comici.ttf",
-        r"C:\Windows\Fonts\comicz.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
+    preferred_keywords = ["dejavuserif", "dejavusans", "liberationserif", "liberationsans", "arial"]
+    found = []
 
-    gost_candidates = [
-        _env_path("CAKESTAMP_FONT_GOST"),
-        r"C:\Windows\Fonts\GOST type AU.ttf",
-        r"C:\Windows\Fonts\GOST_AU.ttf",
-        r"C:\Windows\Fonts\gost type au.ttf",
-        r"C:\Windows\Fonts\Gost_A.ttf",
-        # fallback, because we do not distribute font files
-        r"C:\Windows\Fonts\arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
-
-    if font_choice == "comic":
-        found = _first_existing(comic_candidates)
-    elif font_choice == "gost":
-        found = _first_existing(gost_candidates)
-    else:
-        found = _first_existing(classic_candidates)
+    for base in search_dirs:
+        if not base or not os.path.isdir(base):
+            continue
+        for root, _dirs, files in os.walk(base):
+            for fn in files:
+                if fn.lower().endswith((".ttf", ".otf")):
+                    full = os.path.join(root, fn)
+                    found.append(full)
+                    low = fn.lower().replace(" ", "")
+                    if any(key in low for key in preferred_keywords):
+                        return full
 
     if found:
-        return found
-
-    fallback = _first_existing(classic_candidates + comic_candidates + gost_candidates)
-    if fallback:
-        return fallback
+        return found[0]
 
     raise FileNotFoundError(
-        "Не найден TTF-шрифт. Укажи путь в .env: CAKESTAMP_FONT_CLASSIC / COMIC / GOST"
+        "Не найден TTF-шрифт в контейнере. "
+        "Для Docker добавьте fonts-dejavu-core или укажите путь в .env: "
+        "CAKESTAMP_FONT_CLASSIC=/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
     )
+
 
 
 def _safe_name(value: str, default: str = "project") -> str:

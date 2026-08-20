@@ -1,3 +1,14 @@
+# CakeStampBot v0.7.5
+
+Исправление v0.7.5:
+
+- исправлена ошибка `Не найден TTF-шрифт` на хостинге;
+- бот теперь сам ищет шрифты в Linux/Docker: `/usr/share/fonts`, `/usr/local/share/fonts`, `/app/fonts`;
+- в `Dockerfile` добавлена установка `fonts-dejavu-core` и `fontconfig`;
+- Classic/Comic/GOST имеют безопасный fallback на DejaVu, чтобы бот не падал.
+
+Для Bothost желательно запускать именно через `Dockerfile`.
+
 # CakeStampBot v0.7.4
 
 Исправление v0.7.4:
