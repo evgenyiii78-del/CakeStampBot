@@ -285,6 +285,28 @@ async def stamp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def _generate_preview_and_confirm(message, context: ContextTypes.DEFAULT_TYPE):
+    """Generate preview and show confirmation dialog."""
+    params = context.user_data
+    
+    # Simple preview text for now
+    preview = summary_text(params)
+    
+    await message.edit_text(
+        f"{preview}\n\n✅ Всё готово к созданию 3MF?",
+        reply_markup=final_preview_keyboard(),
+    )
+
+
+async def _send_last_result(message, context: ContextTypes.DEFAULT_TYPE):
+    """Send the last generated result."""
+    # This would need to store the result from generation
+    # For now, just acknowledge
+    await message.edit_text(
+        "Готовится файл...",
+    )
+
+
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -404,12 +426,14 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["add_heart"] = add_heart
 
         if "line_width" not in context.user_data:
+            # Для режима text - line_width еще не выбран
             await query.edit_message_text(
                 f"Сердечко: {'да' if add_heart else 'нет'}.\n\nТеперь выбери толщину линии:",
                 reply_markup=line_width_keyboard(),
             )
             return
 
+        # Для режима image или когда line_width уже есть
         await query.edit_message_text(
             f"Сердечко: {'да' if add_heart else 'нет'}.\n\nКак расположить объекты в 3MF?",
             reply_markup=layout_keyboard(),
@@ -600,7 +624,7 @@ async def cake_worker(app: Application):
                     params.get("product_mode", "stamp"),
                     float(params.get("base_diameter", 105)),
                     float(params.get("line_width", 0.45)),
-                    bool(params.get("add_heart", False)),
+                    bool(params.get("add_heart", True)),
                     base_shape,
                 )
 
