@@ -217,10 +217,16 @@ def final_preview_keyboard():
         ],
     ])
 
+
+
+def line_width_keyboard():
+    # Backward-compatible alias. Older callback flow uses this name.
+    return width_keyboard()
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "🍰 CakeStampBot v0.7.1.1\n\n"
+        "🍰 CakeStampBot v0.7.2.2.1\n\n"
         "Главное меню всегда внизу — команды вручную вводить не нужно.\n\n"
         "Можно сделать:\n"
         "• штамп для крема\n"
@@ -234,7 +240,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Помощь по CakeStampBot v0.7.1.1\n\n"
+        "Помощь по CakeStampBot v0.7.2.2.1\n\n"
         "Кнопки внизу:\n"
         "🍰 Новый проект — начать заново\n"
         "✍️ Текст — модель из текста\n"
@@ -675,7 +681,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    print("CakeStampBot v0.7.1.1 started")
+    print("CakeStampBot v0.7.2.2.1 started")
     app.run_polling()
 
 
