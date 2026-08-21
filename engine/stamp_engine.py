@@ -2,7 +2,7 @@ from pathlib import Path
 import logging, trimesh
 from .common import *
 logger=logging.getLogger('CakeStampEngine.Stamp')
-PX=28; RELIEF_H=6.5; BASE_H=.7
+PX=36; RELIEF_H=6.5; BASE_H=.7
 
 def build_stamp_from_text(text, output_dir, base_size='105', base_shape='round', line_width=.45, font_choice='classic', add_heart=False, layout_mode='assembled'):
     mask=render_text_mask(text,82,PX,font_choice); return _build(mask,output_dir,'text_stamp',base_size,base_shape,line_width,add_heart,layout_mode)
