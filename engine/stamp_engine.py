@@ -3,55 +3,14 @@ from pathlib import Path
 import logging
 import trimesh
 
-from shapely.geometry import LineString
-from shapely.ops import unary_union
-
 from .common import *
 from .vector_text import text_to_shape
 
-logger = logging.getLogger("CakeStampEngine.StampV1_1_0")
+logger = logging.getLogger("CakeStampEngine.StampV1_1_1")
 
 PX = 36
 RELIEF_H = 6.5
 BASE_H = 0.7
-
-
-def _outline_stroke_from_filled_shape(filled_shape, line_width=0.45):
-    """
-    Convert filled glyph polygons to a clean outline stroke shape.
-    This preserves smooth ovals and curves because the contours come from TTF,
-    not from raster skeletonization.
-    """
-    geoms = []
-    if filled_shape is None or filled_shape.is_empty:
-        return None
-
-    polys = [filled_shape] if filled_shape.geom_type == "Polygon" else list(getattr(filled_shape, "geoms", []))
-    for poly in polys:
-        if poly.is_empty or poly.area <= 0.01:
-            continue
-        rings = [poly.exterior] + list(poly.interiors)
-        for ring in rings:
-            line = LineString(list(ring.coords))
-            if line.length < 0.25:
-                continue
-            geoms.append(
-                line.buffer(
-                    max(0.25, float(line_width)) / 2.0,
-                    cap_style=1,
-                    join_style=1,
-                    resolution=48,
-                )
-            )
-
-    if not geoms:
-        return None
-
-    merged = unary_union(geoms).buffer(0)
-    # gentle cleanup; preserve smooth loops
-    merged = merged.buffer(0.02, resolution=48).buffer(-0.02, resolution=48).buffer(0)
-    merged = merged.simplify(0.008, preserve_topology=True).buffer(0)
-    return merged
 
 
 def _target_box(base_size, base_shape):
@@ -66,11 +25,16 @@ def build_stamp_from_text(
     output_dir,
     base_size="105",
     base_shape="round",
-    line_width=0.45,
+    line_width=0.45,   # kept for bot compatibility, but no longer used for text stamps
     font_choice="classic",
     add_heart=False,
     layout_mode="assembled",
 ):
+    """
+    v1.1.1:
+    Text stamp is now a SOLID vector relief (filled glyphs),
+    not a hollow contour stroke.
+    """
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
@@ -84,9 +48,11 @@ def build_stamp_from_text(
         line_spacing=0.92,
         curve_steps=20,
     )
-    relief_shape = _outline_stroke_from_filled_shape(vec.shape, line_width=line_width)
+
+    # Full filled glyphs -> solid relief.
+    relief_shape = vec.shape.buffer(0).simplify(0.010, preserve_topology=True).buffer(0)
     if relief_shape is None or relief_shape.is_empty:
-        raise RuntimeError("Не удалось построить векторный контур штампа.")
+        raise RuntimeError("Не удалось построить полнотелый векторный рельеф штампа.")
 
     return _build_scene(
         relief_shape=relief_shape,
@@ -99,10 +65,11 @@ def build_stamp_from_text(
         layout_mode=layout_mode,
         preview_mask=render_text_mask(text, 82, PX, font_choice),
         meta_extra={
-            "geometry_core": "vector_text_ttf_outlines_to_outline_stroke",
+            "geometry_core": "vector_text_ttf_filled_glyphs",
             "font_path": vec.font_path,
             "actual_text_width_mm": vec.width_mm,
             "actual_text_height_mm": vec.height_mm,
+            "stamp_text_mode": "solid_relief",
         },
     )
 
@@ -116,10 +83,12 @@ def build_stamp_from_image(
     add_heart=False,
     layout_mode="assembled",
 ):
+    """
+    Image stamp remains in image centerline mode for now.
+    """
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
-    # Keep image mode on raster centerline for now.
     mask = render_image_mask(image_path, 82, PX)
     relief_shape = mask_to_centerline_shape(mask, PX, line_width=line_width)
     if relief_shape is None or relief_shape.is_empty:
@@ -154,12 +123,12 @@ def _build_scene(
     preview_mask,
     meta_extra=None,
 ):
-    logger.info("STAMP BUILD START v1.1.0 | %s", name)
+    logger.info("STAMP BUILD START v1.1.1 | %s", name)
 
     nominal, rw, rh = parse_size(base_size, base_shape)
 
     relief = extrude_shape(relief_shape, RELIEF_H, "Relief")
-    # final fit/centering safeguard
+
     if base_shape == "rect":
         center_and_fit(relief, rw * 0.78, rh * 0.56, 4)
         base = make_rect_base(rw, rh, BASE_H)
@@ -214,10 +183,10 @@ def _build_scene(
         suffix = "stamp_ASSEMBLED"
 
     pp = str(output / f"{name}_preview.png")
-    preview(pp, name, "stamp", preview_mask, note=f"Vector stamp line {line_width:.2f} mm")
+    preview(pp, name, "stamp", preview_mask, note="Solid vector text stamp")
 
     meta = {
-        "version": "1.1.0",
+        "version": "1.1.1",
         "mode": "stamp",
         "base_shape": base_shape,
         "base_size": base_size,
