@@ -1,6 +1,6 @@
-# CakeStampBot v1.0.1 Fast Vector Core
+# CakeStampBot v1.0.2 Fast Vector Core
 
-Hotfix после v1.0.0:
+Hotfix после v1.0.2:
 
 - векторный топпер оставлен, но уменьшена чрезмерная детализация;
 - curve steps снижены до 20;
@@ -12,7 +12,7 @@ Hotfix после v1.0.0:
 Цель: сохранить плавные буквы, но вернуть генерацию к нормальному времени на Bothost.
 
 
-# CakeStampBot v1.0.1 Core Rewrite
+# CakeStampBot v1.0.2 Core Rewrite
 
 Это первая версия нового геометрического ядра.
 
@@ -105,5 +105,5 @@ python scripts/smoke_test.py
 Ожидаемый результат:
 
 ```text
-Smoke test PASS v1.0.1
+Smoke test PASS v1.0.2
 ```
