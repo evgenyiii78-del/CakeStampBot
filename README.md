@@ -1,4 +1,14 @@
-# CakeStampBot v1.1.1 — Solid Vector Text Stamp
+# CakeStampBot v1.2.0 — Centerline Stamp Core
+
+Исправление текстового штампа:
+
+- текстовый штамп снова строится как **centerline relief**;
+- параметр толщины линии (`0.35 / 0.45 мм`) снова реально управляет шириной штриха;
+- генерация текста переведена на **hi-res centerline core**;
+- полнотелые буквы убраны, двойная пустая обводка тоже убрана.
+
+
+# CakeStampBot v1.2.0 — Solid Vector Text Stamp
 
 Исправление текстового штампа:
 
@@ -9,7 +19,7 @@
 - режим картинки для штампа пока остаётся image centerline.
 
 
-# CakeStampBot v1.1.1 — Vector Stamp Core
+# CakeStampBot v1.2.0 — Vector Stamp Core
 
 Главное изменение этой версии:
 
@@ -20,9 +30,9 @@
 - режим картинки для штампа пока оставлен на raster centerline.
 
 
-# CakeStampBot v1.1.1 Fast Vector Core
+# CakeStampBot v1.2.0 Fast Vector Core
 
-Hotfix после v1.1.1:
+Hotfix после v1.2.0:
 
 - векторный топпер оставлен, но уменьшена чрезмерная детализация;
 - curve steps снижены до 20;
@@ -34,7 +44,7 @@ Hotfix после v1.1.1:
 Цель: сохранить плавные буквы, но вернуть генерацию к нормальному времени на Bothost.
 
 
-# CakeStampBot v1.1.1 Core Rewrite
+# CakeStampBot v1.2.0 Core Rewrite
 
 Это первая версия нового геометрического ядра.
 
@@ -127,5 +137,5 @@ python scripts/smoke_test.py
 Ожидаемый результат:
 
 ```text
-Smoke test PASS v1.1.1
+Smoke test PASS v1.2.0
 ```

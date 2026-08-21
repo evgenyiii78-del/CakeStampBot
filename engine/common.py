@@ -217,7 +217,7 @@ def preview(path,title,mode,mask=None,note=''):
         text_box=(760,150)
         text_y=335
 
-    d.text((120,70),f'CakeStampBot v1.1.1 — {mode.upper()}',fill=(30,30,30))
+    d.text((120,70),f'CakeStampBot v1.2.0 — {mode.upper()}',fill=(30,30,30))
     d.text((120,910),note or title[:70],fill=(30,30,30))
     img.save(path)
 

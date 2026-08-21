@@ -4,16 +4,17 @@ import logging
 import trimesh
 
 from .common import *
-from .vector_text import text_to_shape
 
-logger = logging.getLogger("CakeStampEngine.StampV1_1_1")
+logger = logging.getLogger("CakeStampEngine.StampV1_2_0")
 
-PX = 36
+# hi-res text centerline core
+PX_TEXT = 64
+PX_IMAGE = 36
 RELIEF_H = 6.5
 BASE_H = 0.7
 
 
-def _target_box(base_size, base_shape):
+def _fit_targets(base_size, base_shape):
     nominal, rw, rh = parse_size(base_size, base_shape)
     if base_shape == "rect":
         return nominal, rw, rh, rw * 0.78, rh * 0.56
@@ -25,34 +26,27 @@ def build_stamp_from_text(
     output_dir,
     base_size="105",
     base_shape="round",
-    line_width=0.45,   # kept for bot compatibility, but no longer used for text stamps
+    line_width=0.45,
     font_choice="classic",
     add_heart=False,
     layout_mode="assembled",
 ):
     """
-    v1.1.1:
-    Text stamp is now a SOLID vector relief (filled glyphs),
-    not a hollow contour stroke.
+    v1.2.0:
+    Text stamp uses CENTERLINE geometry again, but at much higher resolution.
+    This makes line_width (0.35 / 0.45 / etc.) actually control the printed stroke.
     """
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
-    nominal, rw, rh, target_w, target_h = _target_box(base_size, base_shape)
+    nominal, rw, rh, target_w, target_h = _fit_targets(base_size, base_shape)
 
-    vec = text_to_shape(
-        text=text,
-        font_choice=font_choice,
-        target_width_mm=target_w,
-        target_height_mm=target_h,
-        line_spacing=0.92,
-        curve_steps=20,
-    )
-
-    # Full filled glyphs -> solid relief.
-    relief_shape = vec.shape.buffer(0).simplify(0.010, preserve_topology=True).buffer(0)
+    # Render a much cleaner text mask, then build centerline relief.
+    # This restores real line-width control for cream stamps.
+    mask = render_text_mask(text, 82, PX_TEXT, font_choice)
+    relief_shape = mask_to_centerline_shape(mask, PX_TEXT, line_width=line_width)
     if relief_shape is None or relief_shape.is_empty:
-        raise RuntimeError("Не удалось построить полнотелый векторный рельеф штампа.")
+        raise RuntimeError("Не удалось построить centerline-штамп из текста.")
 
     return _build_scene(
         relief_shape=relief_shape,
@@ -63,13 +57,13 @@ def build_stamp_from_text(
         line_width=line_width,
         add_heart=add_heart,
         layout_mode=layout_mode,
-        preview_mask=render_text_mask(text, 82, PX, font_choice),
+        preview_mask=mask,
+        fit_w=target_w,
+        fit_h=target_h,
         meta_extra={
-            "geometry_core": "vector_text_ttf_filled_glyphs",
-            "font_path": vec.font_path,
-            "actual_text_width_mm": vec.width_mm,
-            "actual_text_height_mm": vec.height_mm,
-            "stamp_text_mode": "solid_relief",
+            "geometry_core": "text_mask_centerline_hires",
+            "stamp_text_mode": "centerline",
+            "px_per_mm": PX_TEXT,
         },
     )
 
@@ -84,15 +78,17 @@ def build_stamp_from_image(
     layout_mode="assembled",
 ):
     """
-    Image stamp remains in image centerline mode for now.
+    Image stamp remains centerline-based.
     """
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
-    mask = render_image_mask(image_path, 82, PX)
-    relief_shape = mask_to_centerline_shape(mask, PX, line_width=line_width)
+    mask = render_image_mask(image_path, 82, PX_IMAGE)
+    relief_shape = mask_to_centerline_shape(mask, PX_IMAGE, line_width=line_width)
     if relief_shape is None or relief_shape.is_empty:
         raise RuntimeError("Не удалось построить контур из картинки.")
+
+    nominal, rw, rh, target_w, target_h = _fit_targets(base_size, base_shape)
 
     return _build_scene(
         relief_shape=relief_shape,
@@ -104,9 +100,12 @@ def build_stamp_from_image(
         add_heart=add_heart,
         layout_mode=layout_mode,
         preview_mask=mask,
+        fit_w=target_w,
+        fit_h=target_h,
         meta_extra={
             "geometry_core": "image_mask_centerline",
             "source_image": str(image_path),
+            "px_per_mm": PX_IMAGE,
         },
     )
 
@@ -121,24 +120,26 @@ def _build_scene(
     add_heart,
     layout_mode,
     preview_mask,
+    fit_w,
+    fit_h,
     meta_extra=None,
 ):
-    logger.info("STAMP BUILD START v1.1.1 | %s", name)
+    logger.info("STAMP BUILD START v1.2.0 | %s", name)
 
     nominal, rw, rh = parse_size(base_size, base_shape)
 
     relief = extrude_shape(relief_shape, RELIEF_H, "Relief")
 
     if base_shape == "rect":
-        center_and_fit(relief, rw * 0.78, rh * 0.56, 4)
+        center_and_fit(relief, fit_w, fit_h, 4)
         base = make_rect_base(rw, rh, BASE_H)
         base_name = f"Base_Rect_{int(rw)}x{int(rh)}mm"
     else:
-        center_and_fit(relief, nominal * 0.72, nominal * 0.52, 4)
+        center_and_fit(relief, fit_w, fit_h, 4)
         base = make_cylinder(nominal, BASE_H)
         base_name = f"Base_Round_{int(nominal)}mm"
 
-    heart = heart_mesh(max(line_width, 0.45), RELIEF_H, -nominal * 0.30) if add_heart else None
+    heart = heart_mesh(max(line_width, 0.35), RELIEF_H, -nominal * 0.30) if add_heart else None
 
     output = Path(output_dir)
     stls = []
@@ -183,10 +184,10 @@ def _build_scene(
         suffix = "stamp_ASSEMBLED"
 
     pp = str(output / f"{name}_preview.png")
-    preview(pp, name, "stamp", preview_mask, note="Solid vector text stamp")
+    preview(pp, name, "stamp", preview_mask, note=f"Centerline stamp {line_width:.2f} mm")
 
     meta = {
-        "version": "1.1.1",
+        "version": "1.2.0",
         "mode": "stamp",
         "base_shape": base_shape,
         "base_size": base_size,
