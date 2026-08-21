@@ -142,7 +142,7 @@ def text_to_shape(
     font_choice: str = "classic",
     target_width_mm: float = 110.0,
     target_height_mm: float = 45.0,
-    line_spacing: float = 1.16,
+    line_spacing: float = 1.05,
     curve_steps: int = 20,
 ) -> VectorTextResult:
     """

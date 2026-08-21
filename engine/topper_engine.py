@@ -13,7 +13,7 @@ logger = logging.getLogger("CakeStampEngine.TopperV1_0_2")
 
 DEFAULT_TEXT_HEIGHT = 2.8
 DEFAULT_BACKING_HEIGHT = 1.3
-DEFAULT_BACKING_MARGIN = 1.10
+DEFAULT_BACKING_MARGIN = 1.18
 
 LEG_LEN = 45.0
 LEG_W = 3.0
@@ -62,21 +62,25 @@ def _connect_components(shape, bridge_width=2.0):
     if parts:
         connected = unary_union([connected] + parts).buffer(0)
 
-    return connected.buffer(0).simplify(0.010, preserve_topology=True).buffer(0)
+    return connected.buffer(0).simplify(0.008, preserve_topology=True).buffer(0)
 
 
-def _force_two_line_bridges(base_shape, bridge_width=2.2):
+def _force_two_line_bridges(base_shape, bridge_width=3.0):
     """
-    If text is in two lines, create two explicit bridges between upper/lower clusters.
-    This avoids relying on accidental auto-links and gives a more controlled result.
+    v1.1.0:
+    Create two deliberate vertical bridge pads between two text lines.
+
+    The old method sometimes found tiny accidental nearest links.
+    This method detects upper/lower clusters and places two rounded bridge
+    columns in the overlap/span zone.
     """
     parts = [p for p in _as_polys(base_shape) if p.area >= 0.16]
     if len(parts) < 2:
         return base_shape
 
-    # Cluster by centroid Y into top and bottom groups.
     ys = [p.centroid.y for p in parts]
     y_mid = (min(ys) + max(ys)) / 2.0
+
     top = [p for p in parts if p.centroid.y >= y_mid]
     bottom = [p for p in parts if p.centroid.y < y_mid]
 
@@ -89,42 +93,58 @@ def _force_two_line_bridges(base_shape, bridge_width=2.2):
     tminx, tminy, tmaxx, tmaxy = top_union.bounds
     bminx, bminy, bmaxx, bmaxy = bot_union.bounds
 
+    # Use horizontal overlap when possible; otherwise use shared total span.
     overlap_min = max(tminx, bminx)
     overlap_max = min(tmaxx, bmaxx)
-    if overlap_max <= overlap_min:
-        # no horizontal overlap - use union box span
-        overlap_min = min(tminx, bminx)
-        overlap_max = max(tmaxx, bmaxx)
 
-    span = overlap_max - overlap_min
-    x1 = overlap_min + span * 0.30
-    x2 = overlap_min + span * 0.70
+    if overlap_max - overlap_min < 12.0:
+        overlap_min = max(min(tminx, bminx), min(tmaxx, bmaxx) - 55.0)
+        overlap_max = min(max(tmaxx, bmaxx), max(tminx, bminx) + 55.0)
+
+    span = max(overlap_max - overlap_min, 1.0)
+
+    # Two bridges, not one. Place them away from the exact center.
+    xs = [
+        overlap_min + span * 0.34,
+        overlap_min + span * 0.66,
+    ]
+
+    gap_y0 = bmaxy - 0.8
+    gap_y1 = tminy + 0.8
+
+    if gap_y1 < gap_y0:
+        gap_y0, gap_y1 = gap_y1, gap_y0
+
+    bridge_height = max(gap_y1 - gap_y0, 2.0)
 
     bridges = []
-    for x in [x1, x2]:
-        # Intersect slim vertical probe with groups to find anchor points.
-        probe = box(x - 0.2, bmaxy - 2.0, x + 0.2, tminy + 2.0)
-        pt = top_union.intersection(probe)
-        pb = bot_union.intersection(probe)
-
-        if pt.is_empty or pb.is_empty:
-            # fallback to nearest points between top/bottom at overall distance
-            p1, p2 = nearest_points(top_union, bot_union)
-            # nudge x to target region if possible
-            line = LineString([(x, p2.y), (x, p1.y)])
-        else:
-            # use bounds of intersections to anchor bridge roughly centered in probe
-            _, pby0, _, pby1 = pb.bounds
-            _, pty0, _, pty1 = pt.bounds
-            y0 = pby1
-            y1 = pty0
-            if y1 < y0:
-                y0, y1 = y1, y0
-            line = LineString([(x, y0), (x, y1)])
-
-        bridge = line.buffer(
-            bridge_width / 2.0, cap_style=1, join_style=1, resolution=32
+    for x in xs:
+        # Rounded vertical pad.
+        raw = box(
+            x - bridge_width / 2.0,
+            gap_y0,
+            x + bridge_width / 2.0,
+            gap_y1,
         )
+
+        bridge = raw.buffer(
+            bridge_width * 0.35,
+            resolution=32,
+            join_style=1,
+        ).buffer(
+            -bridge_width * 0.35,
+            resolution=32,
+        ).buffer(0)
+
+        # If the gap is tiny, still add a circular-ish weld pad.
+        if bridge.is_empty or bridge.area < 0.3:
+            bridge = box(
+                x - bridge_width / 2.0,
+                gap_y0 - 0.8,
+                x + bridge_width / 2.0,
+                gap_y1 + 0.8,
+            ).buffer(0.6, resolution=32).buffer(0)
+
         bridges.append(bridge)
 
     return unary_union([base_shape] + bridges).buffer(0)
@@ -173,14 +193,14 @@ def build_topper_from_text(
     legs="auto",
 ):
     """
-    v1.0.2:
+    v1.1.0:
     - TextBase is one unified object: text-shaped backing + bridges.
     - Leg(s) are separate objects in 3MF so user can position them in slicer.
     - Reduced line spacing.
     - Two explicit bridges between lines for 2-line text.
     """
     logger.info(
-        "TOPPER BUILD START v1.0.2 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
+        "TOPPER BUILD START v1.1.0 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
         width_mm, font_choice, text_height, backing_height, legs
     )
 
@@ -192,10 +212,10 @@ def build_topper_from_text(
         font_choice=font_choice,
         target_width_mm=width_mm * 0.88,
         target_height_mm=width_mm * 0.34,
-        line_spacing=0.94,
+        line_spacing=0.82,
         curve_steps=20,
     )
-    text_shape = vec.shape.buffer(0).simplify(0.018, preserve_topology=True).buffer(0)
+    text_shape = vec.shape.buffer(0).simplify(0.012, preserve_topology=True).buffer(0)
     if text_shape.length > 2500:
         text_shape = text_shape.simplify(0.035, preserve_topology=True).buffer(0)
 
@@ -210,7 +230,7 @@ def build_topper_from_text(
     # Auto connect all islands.
     backing_shape = _connect_components(backing_shape, bridge_width=2.0)
     # Explicitly bridge two lines in two places.
-    backing_shape = _force_two_line_bridges(backing_shape, bridge_width=2.2)
+    backing_shape = _force_two_line_bridges(backing_shape, bridge_width=3.0)
     # Final cleanup.
     backing_shape = backing_shape.buffer(0.03, resolution=32).buffer(-0.03, resolution=32).buffer(0)
 
@@ -262,11 +282,11 @@ def build_topper_from_text(
         "topper",
         "topper",
         mask,
-        note=f"Topper v1.0.2, TextBase + separate {leg_count} leg(s), spacing 0.94"
+        note=f"Topper v1.1.0, TextBase + separate {leg_count} leg(s), spacing 0.82"
     )
 
     meta = {
-        "version": "1.0.2",
+        "version": "1.0.3",
         "mode": "topper",
         "geometry_core": "vector_text_ttf_outlines",
         "font_path": vec.font_path,
@@ -276,12 +296,12 @@ def build_topper_from_text(
         "text_height_mm": text_height,
         "backing_height_mm": backing_height,
         "backing_margin_mm": DEFAULT_BACKING_MARGIN,
-        "line_spacing": 0.94,
+        "line_spacing": 0.82,
         "leg_width_mm": LEG_W,
         "leg_length_mm": LEG_LEN,
         "legs": leg_count,
         "objects": ["Topper_TextBase", "Topper_Text"] + [f"Topper_Leg_{i}" for i in range(1, leg_count+1)],
-        "note": "v1.0.2: unified textbase, separate leg objects, two explicit bridges between lines.",
+        "note": "v1.1.0: unified textbase, separate leg objects, two stronger explicit bridge pads between lines, tighter spacing.",
     }
 
     return export_bundle(

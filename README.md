@@ -1,6 +1,17 @@
-# CakeStampBot v1.0.2 Fast Vector Core
+# CakeStampBot v1.1.0 — Vector Stamp Core
 
-Hotfix после v1.0.2:
+Главное изменение этой версии:
+
+- **текстовый штамп** переведён на тот же принцип, что и топпер:
+  `TTF glyph outlines → vector contours → clean outline stroke → 3MF`
+- контуры букв и овалы должны быть намного ровнее;
+- relief штампа теперь строится из **настоящих контуров шрифта**, а не из пиксельной маски;
+- режим картинки для штампа пока оставлен на raster centerline.
+
+
+# CakeStampBot v1.1.0 Fast Vector Core
+
+Hotfix после v1.1.0:
 
 - векторный топпер оставлен, но уменьшена чрезмерная детализация;
 - curve steps снижены до 20;
@@ -12,7 +23,7 @@ Hotfix после v1.0.2:
 Цель: сохранить плавные буквы, но вернуть генерацию к нормальному времени на Bothost.
 
 
-# CakeStampBot v1.0.2 Core Rewrite
+# CakeStampBot v1.1.0 Core Rewrite
 
 Это первая версия нового геометрического ядра.
 
@@ -105,5 +116,5 @@ python scripts/smoke_test.py
 Ожидаемый результат:
 
 ```text
-Smoke test PASS v1.0.2
+Smoke test PASS v1.1.0
 ```
