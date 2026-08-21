@@ -32,5 +32,5 @@ def _build(mask, output_dir, name, base_size, base_shape, line_width, add_heart,
             h=heart.copy(); h.apply_translation([0,0,BASE_H]); scene.add_geometry(h,geom_name='Heart',node_name='Heart')
         suffix='stamp_ASSEMBLED'
     pp=str(output/f'{name}_preview.png'); preview(pp,name,'stamp',mask,note=f'Stamp line {line_width} mm')
-    meta={'version':'0.8.0','mode':'stamp','base_shape':base_shape,'base_size':str(base_size),'line_width_mm':line_width,'relief_height_mm':RELIEF_H,'base_thickness_mm':BASE_H,'add_heart':add_heart,'layout_mode':layout_mode,'objects':[base_name,'Relief']+(['Heart'] if add_heart else [])}
+    meta={'version':'0.8.1','mode':'stamp','base_shape':base_shape,'base_size':str(base_size),'line_width_mm':line_width,'relief_height_mm':RELIEF_H,'base_thickness_mm':BASE_H,'add_heart':add_heart,'layout_mode':layout_mode,'objects':[base_name,'Relief']+(['Heart'] if add_heart else [])}
     return export_bundle(output,name,scene,pp,stls,meta,suffix)

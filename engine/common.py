@@ -192,7 +192,7 @@ def preview(path,title,mode,mask=None,note=''):
         mi=Image.fromarray((mask.astype(np.uint8)*255),mode='L'); bb=mi.getbbox()
         if bb:
             cr=mi.crop(bb); cr.thumbnail((680,430),Image.Resampling.LANCZOS); col=Image.new('RGB',cr.size,(105,70,25)); img.paste(col,((1000-cr.width)//2,285),cr)
-    d.text((120,70),f'CakeStampBot v0.8.0 — {mode.upper()}',fill=(30,30,30)); d.text((120,910),note or title[:70],fill=(30,30,30)); img.save(path)
+    d.text((120,70),f'CakeStampBot v0.8.1 — {mode.upper()}',fill=(30,30,30)); d.text((120,910),note or title[:70],fill=(30,30,30)); img.save(path)
 
 def export_bundle(output,name,scene,preview_png,stls,meta,suffix):
     output=Path(output); project=str(output/f'{name}_{suffix}.3mf'); scene.export(project)

@@ -20,5 +20,5 @@ def build_topper_from_text(text, output_dir, width_mm=120, font_choice='classic'
     for i,leg in enumerate(leg_meshes,1): scene.add_geometry(leg.copy(),geom_name=f'Topper_Leg_{i}',node_name=f'Topper_Leg_{i}')
     txt=text_mesh.copy(); txt.apply_translation([0,0,backing_height]); scene.add_geometry(txt,geom_name='Topper_Text',node_name='Topper_Text')
     pp=str(output/'topper_preview.png'); preview(pp,'topper','topper',mask,note=f'Topper text {text_height} mm, backing {backing_height} mm, legs {leg_count}')
-    meta={'version':'0.8.0','mode':'topper','width_mm':width_mm,'text_height_mm':text_height,'backing_height_mm':backing_height,'line_width_mm':line_width,'legs':leg_count,'objects':['Topper_Letter_Backing','Topper_Text']+[f'Topper_Leg_{i}' for i in range(1,leg_count+1)]}
+    meta={'version':'0.8.1','mode':'topper','width_mm':width_mm,'text_height_mm':text_height,'backing_height_mm':backing_height,'line_width_mm':line_width,'legs':leg_count,'objects':['Topper_Letter_Backing','Topper_Text']+[f'Topper_Leg_{i}' for i in range(1,leg_count+1)]}
     return export_bundle(output,'topper',scene,pp,stls,meta,'topper_ASSEMBLED')
