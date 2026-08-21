@@ -124,6 +124,89 @@ def mask_to_centerline_shape(mask, px_per_mm=24, line_width=.45, smooth=.30):
     merged=unary_union(geoms).buffer(0); eps=max(.018,line_width*.10)
     return merged.buffer(eps,resolution=48).buffer(-eps,resolution=48).buffer(0).simplify(.015,preserve_topology=True).buffer(0)
 
+
+def mask_to_centerline_line(mask, px_per_mm: int = 36):
+    """
+    Unbuffered centerline geometry from binary mask.
+    Used by stamp core to fit first and stroke later.
+    """
+    import numpy as np
+    from shapely.geometry import LineString
+    from shapely.ops import unary_union, linemerge
+    from skimage.morphology import skeletonize
+
+    arr = np.asarray(mask)
+    if arr.ndim == 3:
+        arr = arr[..., 0]
+    bin_mask = (arr > 0)
+
+    sk = skeletonize(bin_mask)
+    h, w = sk.shape
+
+    ys, xs = np.where(sk)
+    if len(xs) == 0:
+        return None
+
+    pts = {(int(x), int(y)) for x, y in zip(xs, ys)}
+    nbrs = {}
+    for x, y in pts:
+        cur = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+                p = (x + dx, y + dy)
+                if p in pts:
+                    cur.append(p)
+        nbrs[(x, y)] = cur
+
+    visited_edges = set()
+    lines = []
+
+    def mm_point(p):
+        x, y = p
+        return ((x - w / 2.0) / px_per_mm, (h / 2.0 - y) / px_per_mm)
+
+    def walk(start, nxt):
+        path = [start, nxt]
+        prev, cur = start, nxt
+        while True:
+            visited_edges.add(tuple(sorted((prev, cur))))
+            ns = [n for n in nbrs[cur] if n != prev]
+            if len(nbrs[cur]) != 2 or not ns:
+                break
+            n = ns[0]
+            key2 = tuple(sorted((cur, n)))
+            if key2 in visited_edges:
+                break
+            path.append(n)
+            prev, cur = cur, n
+        return path
+
+    endpoints = [p for p, ns in nbrs.items() if len(ns) == 1]
+
+    for ep in endpoints:
+        for n in nbrs[ep]:
+            key = tuple(sorted((ep, n)))
+            if key in visited_edges:
+                continue
+            path = walk(ep, n)
+            if len(path) >= 2:
+                lines.append(LineString([mm_point(p) for p in path]))
+
+    for p, ns in nbrs.items():
+        for n in ns:
+            key = tuple(sorted((p, n)))
+            if key in visited_edges:
+                continue
+            path = walk(p, n)
+            if len(path) >= 2:
+                lines.append(LineString([mm_point(pt) for pt in path]))
+
+    if not lines:
+        return None
+    return linemerge(unary_union(lines))
+
 def extrude_poly(poly,height,z0=0):
     if poly.is_empty or poly.area<=0: return None
     verts=[]; faces=[]; vmap={}
@@ -217,7 +300,7 @@ def preview(path,title,mode,mask=None,note=''):
         text_box=(760,150)
         text_y=335
 
-    d.text((120,70),f'CakeStampBot v1.2.0 — {mode.upper()}',fill=(30,30,30))
+    d.text((120,70),f'CakeStampBot v1.2.4 — {mode.upper()}',fill=(30,30,30))
     d.text((120,910),note or title[:70],fill=(30,30,30))
     img.save(path)
 
@@ -257,10 +340,17 @@ def make_rounded_box_mesh(
 
 
 def export_bundle(output,name,scene,preview_png,stls,meta,suffix):
-    output=Path(output); project=str(output/f'{name}_{suffix}.3mf'); scene.export(project)
-    meta_path=str(output/f'{name}_project.json'); Path(meta_path).write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
-    bundle=str(output/f'{name}_bundle.zip')
-    with zipfile.ZipFile(bundle,'w',zipfile.ZIP_DEFLATED) as z:
-        for p in [project,preview_png,meta_path]+stls:
-            if p and os.path.exists(p): z.write(p,arcname=os.path.basename(p))
-    return ModelResult(project,preview_png,bundle,str(output))
+    """
+    v1.2.4:
+    ZIP export removed. Bot sends only PNG preview and 3MF.
+    STL files may still be written internally for debugging/export, but no ZIP is created.
+    """
+    output=Path(output)
+    project=str(output/f'{name}_{suffix}.3mf')
+    scene.export(project)
+
+    meta_path=str(output/f'{name}_project.json')
+    Path(meta_path).write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
+
+    # Keep ModelResult shape compatible; empty bundle means "do not send zip".
+    return ModelResult(project,preview_png,'',str(output))

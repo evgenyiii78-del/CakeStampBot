@@ -1,4 +1,36 @@
-# CakeStampBot v1.2.0 — Centerline Stamp Core
+# CakeStampBot v1.2.4 — No ZIP Export
+
+Изменение:
+
+- ZIP больше не создаётся;
+- бот больше не отправляет ZIP;
+- пользователю отправляются только:
+  - PNG-превью;
+  - 3MF-файл.
+
+Это уменьшает мусор в Telegram и упрощает выдачу результата.
+
+# CakeStampBot v1.2.4 — More Smooth Stamp
+
+Усилено сглаживание текстового штампа:
+
+- `PX_TEXT` увеличен с 64 до 72;
+- сглаживание centerline увеличено с 4 до 7 проходов;
+- `simplify_mm` увеличен до 0.060 мм, чтобы убрать угловатость;
+- stroke buffer resolution увеличен до 96;
+- итоговый stroke почти не упрощается: `simplify=0.0025`;
+- порядок сохранён: `centerline → fit → strong smooth → exact stroke`.
+
+Толщина линии должна остаться управляемой, а линии должны стать заметно плавнее.
+
+# CakeStampBot v1.2.4 — Fit Smooth Then Stroke
+
+Исправление угловатых линий штампа:
+- порядок теперь: `mask → centerline → fit → smooth centerline → stroke exact width`
+- толщина линии остаётся точной;
+- центральная линия сглаживается перед построением stroke.
+
+# CakeStampBot v1.2.4 — Centerline Stamp Core
 
 Исправление текстового штампа:
 
@@ -8,7 +40,7 @@
 - полнотелые буквы убраны, двойная пустая обводка тоже убрана.
 
 
-# CakeStampBot v1.2.0 — Solid Vector Text Stamp
+# CakeStampBot v1.2.4 — Solid Vector Text Stamp
 
 Исправление текстового штампа:
 
@@ -19,7 +51,7 @@
 - режим картинки для штампа пока остаётся image centerline.
 
 
-# CakeStampBot v1.2.0 — Vector Stamp Core
+# CakeStampBot v1.2.4 — Vector Stamp Core
 
 Главное изменение этой версии:
 
@@ -30,9 +62,9 @@
 - режим картинки для штампа пока оставлен на raster centerline.
 
 
-# CakeStampBot v1.2.0 Fast Vector Core
+# CakeStampBot v1.2.4 Fast Vector Core
 
-Hotfix после v1.2.0:
+Hotfix после v1.2.4:
 
 - векторный топпер оставлен, но уменьшена чрезмерная детализация;
 - curve steps снижены до 20;
@@ -44,7 +76,7 @@ Hotfix после v1.2.0:
 Цель: сохранить плавные буквы, но вернуть генерацию к нормальному времени на Bothost.
 
 
-# CakeStampBot v1.2.0 Core Rewrite
+# CakeStampBot v1.2.4 Core Rewrite
 
 Это первая версия нового геометрического ядра.
 
@@ -137,5 +169,5 @@ python scripts/smoke_test.py
 Ожидаемый результат:
 
 ```text
-Smoke test PASS v1.2.0
+Smoke test PASS v1.2.4
 ```
