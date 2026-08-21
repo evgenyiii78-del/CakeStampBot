@@ -1,5 +1,5 @@
 services:
-  cakestamp-bot:
+  cakestampbot:
     build: .
     env_file:
       - .env

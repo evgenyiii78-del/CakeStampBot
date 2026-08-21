@@ -1,45 +1,14 @@
 from pathlib import Path
 import sys
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from engine import generate_text_project
-
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+from engine import build_stamp_from_text, build_topper_from_text
 
 def main():
-    out = ROOT / "data" / "outputs" / "smoke_test"
-    out.mkdir(parents=True, exist_ok=True)
-
-    result_round = generate_text_project(
-        text="С Днём\nРождения\nТанечка!",
-        output_dir=str(out / "round"),
-        product_mode="stamp",
-        base_diameter=105,
-        line_width=0.45,
-        add_heart=True,
-        font_choice="classic",
-        base_shape="round",
-    )
-
-    result_rect = generate_text_project(
-        text="С Днём\nРождения\nТанечка!",
-        output_dir=str(out / "rect"),
-        product_mode="stamp",
-        base_diameter=105,
-        line_width=0.45,
-        add_heart=True,
-        font_choice="classic",
-        base_shape="rect",
-        layout_mode="assembled",
-    )
-
-    print("Smoke test PASS v0.7 v0.6.1")
-    print("Round 3MF:", result_round.project_3mf)
-    print("Rect 3MF:", result_rect.project_3mf)
-    print("Preview:", result_rect.preview_png)
-    print("Bundle:", result_rect.bundle_zip)
-
-
-if __name__ == "__main__":
-    main()
+    out=ROOT/'data'/'outputs'/'smoke_test'; out.mkdir(parents=True,exist_ok=True)
+    stamp=build_stamp_from_text('С Днём\nРождения!',str(out/'stamp'),base_size='105',base_shape='round',line_width=.45,font_choice='classic',add_heart=False,layout_mode='assembled')
+    topper=build_topper_from_text('С Днём Рождения!',str(out/'topper'),width_mm=120,font_choice='classic',text_height=3.0,backing_height=1.2,legs='auto')
+    print('Smoke test PASS v0.8.0')
+    print('Stamp 3MF:',stamp.project_3mf)
+    print('Topper 3MF:',topper.project_3mf)
+if __name__=='__main__': main()
