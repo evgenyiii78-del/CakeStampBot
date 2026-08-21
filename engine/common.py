@@ -93,7 +93,7 @@ def skeleton_to_polylines(skel):
                 if len(path)>=3: lines.append(path)
     return lines
 
-def chaikin(points, n=4):
+def chaikin(points, n=6):
     pts=[tuple(map(float,p)) for p in points]
     for _ in range(n):
         if len(pts)<3: break
@@ -114,15 +114,15 @@ def mask_to_centerline_shape(mask, px_per_mm=24, line_width=.45, smooth=.30):
     for path in lines:
         pts=[(x*mm,(h-y)*mm) for y,x in path]
         if len(pts)<2: continue
-        line=LineString(chaikin(pts,4))
+        line=LineString(chaikin(pts,6))
         if line.length<.65: continue
         line=line.simplify(smooth,preserve_topology=False)
         if line.length<.65: continue
-        line=resample(line,.16)
-        geoms.append(line.buffer(line_width/2,cap_style=1,join_style=1,resolution=48))
+        line=resample(line,.10)
+        geoms.append(line.buffer(line_width/2,cap_style=1,join_style=1,resolution=128))
     if not geoms: return None
     merged=unary_union(geoms).buffer(0); eps=max(.018,line_width*.10)
-    return merged.buffer(eps,resolution=48).buffer(-eps,resolution=48).buffer(0).simplify(.015,preserve_topology=True).buffer(0)
+    return merged.buffer(eps,resolution=128).buffer(-eps,resolution=128).buffer(0).simplify(.015,preserve_topology=True).buffer(0)
 
 def extrude_poly(poly,height,z0=0):
     if poly.is_empty or poly.area<=0: return None
@@ -179,7 +179,7 @@ def parse_size(val, shape='round'):
 def heart_mesh(line_width,height,y=-31):
     t=np.linspace(0,2*np.pi,320); x=16*np.sin(t)**3; yy=13*np.cos(t)-5*np.cos(2*t)-2*np.cos(3*t)-np.cos(4*t)
     x=(x-x.min())/(x.max()-x.min())*12; yy=(yy-yy.min())/(yy.max()-yy.min())*10; x-= (x.max()+x.min())/2; yy-= (yy.max()+yy.min())/2
-    m=extrude_shape(LineString(np.c_[x,yy]).buffer(line_width/2,cap_style=1,join_style=1,resolution=48),height,'Heart'); m.apply_translation([0,y,0]); return m
+    m=extrude_shape(LineString(np.c_[x,yy]).buffer(line_width/2,cap_style=1,join_style=1,resolution=128),height,'Heart'); m.apply_translation([0,y,0]); return m
 
 def preview(path,title,mode,mask=None,note=''):
     img=Image.new('RGB',(1000,1000),(246,243,235))
@@ -190,33 +190,34 @@ def preview(path,title,mode,mask=None,note=''):
         text_box=(680,430)
         text_y=285
     else:
-        # v0.8.5: real topper preview.
-        # No big plaque. Only a narrow letter backing strip and insertion leg(s).
-        leg_count = 2 if ('legs 2' in str(note).lower() or 'legs:2' in str(note).lower()) else 1
-        strip=(115,360,885,470)
-        d.rounded_rectangle(strip,radius=10,fill=(205,205,198),outline=(105,105,100),width=3)
-
-        if leg_count==2:
-            leg_xs=[405,595]
-        else:
-            leg_xs=[500]
-
-        for x in leg_xs:
-            d.rounded_rectangle((x-25,458,x+25,860),radius=10,fill=(205,205,198),outline=(105,105,100),width=3)
-
+        # Topper preview: text-shaped backing + one slim leg.
+        # Draw a soft backing silhouette under the mask if available.
+        if mask is not None:
+            mi=Image.fromarray((mask.astype(np.uint8)*255),mode='L')
+            bb=mi.getbbox()
+            if bb:
+                cr=mi.crop(bb)
+                cr.thumbnail((760,220),Image.Resampling.LANCZOS)
+                x=(1000-cr.width)//2
+                y=290
+                # Backing shadow slightly wider than letters
+                back = cr.filter(ImageFilter.GaussianBlur(radius=4))
+                back = back.point(lambda p: 220 if p>0 else 0)
+                back_rgb = Image.new('RGBA', back.size, (185,185,180,0))
+                alpha = back.point(lambda p: 235 if p>0 else 0)
+                back_rgb.putalpha(alpha)
+                img.paste(back_rgb, (x,y), back_rgb)
+                # slim leg
+                leg = Image.new('RGBA',(36,360),(185,185,180,235))
+                leg = leg.filter(ImageFilter.GaussianBlur(radius=0.4))
+                img.paste(leg, (482,470), leg)
+                # text
+                col=Image.new('RGB',cr.size,(55,92,205))
+                img.paste(col,(x,y),cr)
         text_box=(760,150)
         text_y=335
 
-    if mask is not None:
-        mi=Image.fromarray((mask.astype(np.uint8)*255),mode='L')
-        bb=mi.getbbox()
-        if bb:
-            cr=mi.crop(bb)
-            cr.thumbnail(text_box,Image.Resampling.LANCZOS)
-            col=Image.new('RGB',cr.size,(55,92,205) if mode=='topper' else (105,70,25))
-            img.paste(col,((1000-cr.width)//2,text_y),cr)
-
-    d.text((120,70),f'CakeStampBot v0.8.5 — {mode.upper()}',fill=(30,30,30))
+    d.text((120,70),f'CakeStampBot v1.0.0 — {mode.upper()}',fill=(30,30,30))
     d.text((120,910),note or title[:70],fill=(30,30,30))
     img.save(path)
 
@@ -249,7 +250,7 @@ def make_rounded_box_mesh(
         center_x + width / 2,
         center_y + depth / 2 - radius,
     )
-    shape = unary_union([base, side]).buffer(radius, resolution=48, cap_style=1, join_style=1).buffer(0)
+    shape = unary_union([base, side]).buffer(radius, resolution=128, cap_style=1, join_style=1).buffer(0)
     mesh = extrude_shape(shape, height, name)
     mesh.apply_translation([0, 0, z0])
     return mesh

@@ -1,35 +1,96 @@
 
 from pathlib import Path
 import logging
-import trimesh
+
+from shapely.geometry import LineString, box
+from shapely.ops import unary_union, nearest_points
 
 from .common import *
+from .vector_text import text_to_shape
 
-logger = logging.getLogger("CakeStampEngine.Topper")
+logger = logging.getLogger("CakeStampEngine.TopperV1")
 
-PX = 38
+# v1.0 real vector topper engine.
+DEFAULT_TEXT_HEIGHT = 3.0
+DEFAULT_BACKING_HEIGHT = 1.3
+DEFAULT_BACKING_MARGIN = 1.15
 
-# Stable topper defaults.
-DEFAULT_LINE_WIDTH = 1.20
-LEG_H = 45.0
-LEG_W = 8.0
+LEG_LEN = 45.0
+LEG_W = 3.0
 
 
-def _fit_text(mesh, max_w, max_h, y_shift=0):
-    b = mesh.bounds
-    w = b[1, 0] - b[0, 0]
-    h = b[1, 1] - b[0, 1]
-    if w <= 0 or h <= 0:
-        return mesh
+def _as_polys(shape):
+    if shape is None or shape.is_empty:
+        return []
+    if shape.geom_type == "Polygon":
+        return [shape]
+    return [g for g in getattr(shape, "geoms", []) if not g.is_empty and g.area > 0.01]
 
-    s = min(max_w / w, max_h / h, 1.0)
-    mesh.apply_scale([s, s, 1])
 
-    b = mesh.bounds
-    dx = -(b[0, 0] + b[1, 0]) / 2
-    dy = -(b[0, 1] + b[1, 1]) / 2 + y_shift
-    mesh.apply_translation([dx, dy, 0])
-    return mesh
+def _connect_components(shape, bridge_width=2.2):
+    parts = _as_polys(shape)
+    if not parts:
+        return shape
+    if len(parts) == 1:
+        return parts[0].buffer(0)
+
+    parts = sorted(parts, key=lambda g: g.area, reverse=True)
+    connected = parts.pop(0)
+
+    while parts:
+        best_i = 0
+        best_d = None
+        best_bridge = None
+
+        for i, g in enumerate(parts):
+            d = connected.distance(g)
+            if best_d is None or d < best_d:
+                p1, p2 = nearest_points(connected, g)
+                bridge = LineString([(p1.x, p1.y), (p2.x, p2.y)]).buffer(
+                    bridge_width / 2.0,
+                    cap_style=1,
+                    join_style=1,
+                    resolution=128,
+                )
+                best_i = i
+                best_d = d
+                best_bridge = bridge
+
+        connected = unary_union([connected, parts.pop(best_i), best_bridge]).buffer(0)
+
+    return connected.buffer(0)
+
+
+def _leg_shapes(backing_shape, width_mm: float, legs: str):
+    minx, miny, maxx, maxy = backing_shape.bounds
+
+    if legs == "two":
+        count = 2
+    elif legs == "one":
+        count = 1
+    else:
+        count = 2 if width_mm >= 150 else 1
+
+    if count == 1:
+        xs = [0.0]
+    else:
+        spread = min(width_mm * 0.34, max(42.0, (maxx - minx) * 0.32))
+        xs = [-spread / 2.0, spread / 2.0]
+
+    shapes = []
+    for x in xs:
+        # 3 mm square-width stake. It overlaps the letter backing by 1.4 mm.
+        raw = box(
+            x - LEG_W / 2.0,
+            miny - LEG_LEN + 1.4,
+            x + LEG_W / 2.0,
+            miny + 1.4,
+        )
+        # tiny fillet only to remove slicer-stress corners; final width stays ~3 mm.
+        leg = raw.buffer(0.20, resolution=64, join_style=1).buffer(-0.20, resolution=64).buffer(0)
+        shapes.append(leg)
+
+    return shapes, count
 
 
 def build_topper_from_text(
@@ -37,135 +98,99 @@ def build_topper_from_text(
     output_dir,
     width_mm=120,
     font_choice="classic",
-    text_height=3.0,
-    backing_height=1.2,
-    line_width=DEFAULT_LINE_WIDTH,
+    text_height=DEFAULT_TEXT_HEIGHT,
+    backing_height=DEFAULT_BACKING_HEIGHT,
+    line_width=1.20,  # kept for bot compatibility; vector topper uses real glyph outlines
     legs="auto",
 ):
     """
-    v0.8.5 stable topper geometry.
-
-    Important design decision:
-    We DO NOT boolean-union text and base into one mesh.
-    We export a clean 3MF with two printable objects:
-    - Topper_Base: rounded support strip + leg(s), watertight simple geometry.
-    - Topper_Text: text relief, slightly overlaps/embeds into base.
-
-    This avoids broken/non-manifold one-piece concatenation.
-    In slicers the objects are placed together and print as one physical topper.
+    v1.0 Core Rewrite for topper:
+    - TTF glyph outlines -> vector polygons;
+    - letter-shaped backing slightly wider than letters;
+    - minimal bridges connect separate letters/lines;
+    - 3 mm stake leg(s), not T-shaped;
+    - base is one clean 2D union extruded once;
+    - text is a clean vector object slightly embedded into base.
     """
     logger.info(
-        "TOPPER BUILD START v0.8.5 | width=%s legs=%s text_h=%s backing_h=%s line=%s",
-        width_mm, legs, text_height, backing_height, line_width
+        "TOPPER BUILD START v1.0.0 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
+        width_mm, font_choice, text_height, backing_height, legs
     )
 
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
-    # 1) Build text mesh.
-    mask = render_text_mask(text, 100, PX, font_choice)
-    text_shape = mask_to_centerline_shape(mask, PX, line_width, smooth=0.16)
-    if text_shape is None or text_shape.is_empty:
-        raise RuntimeError("Не удалось построить контур текста для топпера.")
-
-    text_mesh = extrude_shape(text_shape, text_height, "Topper_Text")
-    _fit_text(text_mesh, max_w=width_mm * 0.88, max_h=width_mm * 0.24, y_shift=9)
-
-    tb = text_mesh.bounds
-    minx, miny, maxx, maxy = tb[0,0], tb[0,1], tb[1,0], tb[1,1]
-    text_w = maxx - minx
-    text_h = maxy - miny
-
-    # 2) Clean simple base, not a giant plaque.
-    # A horizontal rounded support strip just behind/lower than the text.
-    strip_w = min(width_mm * 0.96, max(text_w + 12.0, 70.0))
-    strip_d = max(8.0, min(13.0, text_h * 0.42))
-    strip_y = miny + strip_d * 0.35
-
-    support_strip = make_rounded_box_mesh(
-        "Topper_Support_Strip",
-        strip_w,
-        strip_d,
-        backing_height,
-        0.0,
-        strip_y,
-        0.0,
-        radius=min(strip_d * 0.42, 3.2),
+    vec = text_to_shape(
+        text=text,
+        font_choice=font_choice,
+        target_width_mm=width_mm * 0.88,
+        target_height_mm=width_mm * 0.34,
+        line_spacing=1.15,
+        curve_steps=36,
     )
+    text_shape = vec.shape.buffer(0)
 
-    # 3) Legs connect into strip with overlap.
-    if legs == "one":
-        leg_count = 1
-    elif legs == "two":
-        leg_count = 2
-    else:
-        leg_count = 2 if width_mm >= 145 else 1
+    # Letter backing follows the actual vector letters and is slightly wider.
+    backing_shape = text_shape.buffer(
+        DEFAULT_BACKING_MARGIN,
+        cap_style=1,
+        join_style=1,
+        resolution=128,
+    ).buffer(0)
 
-    if leg_count == 1:
-        xs = [0.0]
-    else:
-        spread = min(width_mm * 0.34, max(42.0, strip_w * 0.34))
-        xs = [-spread / 2, spread / 2]
+    # Connect all separate islands with small rounded bridges.
+    backing_shape = _connect_components(backing_shape, bridge_width=2.2)
 
-    leg_depth = LEG_H
-    leg_y = strip_y - strip_d / 2 - leg_depth / 2 + 2.8
-    leg_z = max(backing_height, min(text_height, 2.8))
+    # Add one or two 3 mm legs into the 2D backing union.
+    legs_polys, leg_count = _leg_shapes(backing_shape, width_mm, legs)
+    base_shape = unary_union([backing_shape] + legs_polys).buffer(0)
 
-    leg_meshes = [
-        make_rounded_box_mesh(
-            f"Topper_Leg_{i+1}",
-            LEG_W,
-            leg_depth,
-            leg_z,
-            x,
-            leg_y,
-            0.0,
-            radius=min(LEG_W * 0.42, 3.0),
-        )
-        for i, x in enumerate(xs)
-    ]
+    # Gentle cleanup; no aggressive simplification.
+    base_shape = base_shape.buffer(0.04, resolution=128).buffer(-0.04, resolution=128).buffer(0)
 
-    # Base can be concatenated because these are simple overlapped boxes,
-    # and slicers handle this much more reliably than complex text unions.
-    base_mesh = trimesh.util.concatenate([support_strip] + leg_meshes)
-    base_mesh.metadata["name"] = "Topper_Base"
+    base_mesh = extrude_shape(base_shape, backing_height, "Topper_Base")
+    text_mesh = extrude_shape(text_shape, text_height, "Topper_Text")
 
-    # Text sits on top but sinks 0.20 mm into the base.
-    text_on_base = text_mesh.copy()
-    text_on_base.apply_translation([0, 0, max(0.0, backing_height - 0.20)])
-    text_on_base.metadata["name"] = "Topper_Text"
+    # Text is embedded 0.20 mm into the base so slicer prints it as fused material.
+    text_mesh.apply_translation([0, 0, max(0.0, backing_height - 0.20)])
 
-    # Export separate STLs.
+    # Export separate clean objects.
     base_stl = str(output / "topper_Base.stl")
     text_stl = str(output / "topper_Text.stl")
     base_mesh.export(base_stl)
-    text_on_base.export(text_stl)
+    text_mesh.export(text_stl)
 
-    # 3MF assembled with separate clean objects.
     scene = trimesh.Scene()
     scene.add_geometry(base_mesh, geom_name="Topper_Base", node_name="Topper_Base")
-    scene.add_geometry(text_on_base, geom_name="Topper_Text", node_name="Topper_Text")
+    scene.add_geometry(text_mesh, geom_name="Topper_Text", node_name="Topper_Text")
 
+    # Preview still uses raster image for Telegram only; model geometry is vector.
+    mask = render_text_mask(text, 100, 32, font_choice)
     preview_path = str(output / "topper_preview.png")
     preview(
         preview_path,
         "topper",
         "topper",
         mask,
-        note=f"Topper v0.8.5, base strip, text {text_height} mm, backing {backing_height} mm, legs {leg_count}"
+        note=f"Topper v1.0, vector text, backing + {leg_count} leg(s) 3 mm"
     )
 
     meta = {
-        "version": "0.8.5",
+        "version": "1.0.0",
         "mode": "topper",
+        "geometry_core": "vector_text_ttf_outlines",
+        "font_path": vec.font_path,
         "width_mm": width_mm,
+        "actual_text_width_mm": vec.width_mm,
+        "actual_text_height_mm": vec.height_mm,
         "text_height_mm": text_height,
         "backing_height_mm": backing_height,
-        "line_width_mm": line_width,
+        "backing_margin_mm": DEFAULT_BACKING_MARGIN,
+        "leg_width_mm": LEG_W,
+        "leg_length_mm": LEG_LEN,
         "legs": leg_count,
         "objects": ["Topper_Base", "Topper_Text"],
-        "auto_legs_rule": "one leg below 145 mm, two legs from 145 mm",
-        "note": "Stable geometry: simple rounded base + separate embedded text, no forced bad one-piece mesh.",
+        "note": "v1.0 vector core: no raster skeleton for topper text; clean letter-shaped backing + 3mm leg(s).",
     }
 
     return export_bundle(
@@ -175,5 +200,5 @@ def build_topper_from_text(
         preview_path,
         [base_stl, text_stl],
         meta,
-        "topper_STABLE"
+        "topper_V1_VECTOR"
     )
