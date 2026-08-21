@@ -67,7 +67,7 @@ def _connect_components(shape, bridge_width=2.0):
 
 def _force_two_line_bridges(base_shape, bridge_width=3.0):
     """
-    v1.2.6:
+    v1.2.7:
     Create two deliberate vertical bridge pads between two text lines.
 
     The old method sometimes found tiny accidental nearest links.
@@ -182,19 +182,18 @@ def _make_beveled_leg_mesh(name, width=3.0, length=45.0, height=2.8):
 
 
 def _make_leg_meshes(width_mm: float, legs: str, backing_bounds, backing_height: float, text_height: float):
+    """
+    v1.2.7:
+    Always create 2 separate beveled legs.
+    The user can delete one in the slicer if needed.
+    """
     minx, miny, maxx, maxy = backing_bounds
-    if legs == "two":
-        count = 2
-    elif legs == "one":
-        count = 1
-    else:
-        count = 2 if width_mm >= 150 else 1
+    count = 2
 
-    if count == 1:
-        xs = [0.0]
-    else:
-        spread = min(width_mm * 0.34, max(42.0, (maxx - minx) * 0.30))
-        xs = [-spread / 2.0, spread / 2.0]
+    # Put legs at about 38% of text/base width, but keep sane limits.
+    textbase_w = maxx - minx
+    spread = min(width_mm * 0.42, max(34.0, textbase_w * 0.38))
+    xs = [-spread / 2.0, spread / 2.0]
 
     leg_meshes = []
     for i, x in enumerate(xs):
@@ -204,8 +203,7 @@ def _make_leg_meshes(width_mm: float, legs: str, backing_bounds, backing_height:
             length=LEG_LEN,
             height=max(backing_height, min(2.8, text_height)),
         )
-        # Keep legs separate, but place them near/aside from textbase in slicer.
-        # The caller shifts them to the left, so here only center X is applied.
+        # Keep legs separate. X offset is applied here; caller places them aside in 3MF.
         leg_mesh.apply_translation([x, 0, 0])
         leg_meshes.append(leg_mesh)
 
@@ -223,14 +221,14 @@ def build_topper_from_text(
     legs="auto",
 ):
     """
-    v1.2.6:
+    v1.2.7:
     - TextBase is one unified object: text-shaped backing + bridges.
     - Leg(s) are separate objects in 3MF so user can position them in slicer.
     - Reduced line spacing.
     - Two explicit bridges between lines for 2-line text.
     """
     logger.info(
-        "TOPPER BUILD START v1.2.6 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
+        "TOPPER BUILD START v1.2.7 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
         width_mm, font_choice, text_height, backing_height, legs
     )
 
@@ -312,7 +310,7 @@ def build_topper_from_text(
         "topper",
         "topper",
         mask,
-        note=f"Topper v1.2.6, TextBase + separate {leg_count} leg(s), spacing 0.82"
+        note=f"Topper v1.2.7, TextBase + 2 separate beveled legs, spacing 0.82"
     )
 
     meta = {
@@ -329,9 +327,9 @@ def build_topper_from_text(
         "line_spacing": 0.82,
         "leg_width_mm": LEG_W,
         "leg_length_mm": LEG_LEN,
-        "legs": leg_count,
+        "legs": 2,
         "objects": ["Topper_TextBase", "Topper_Text"] + [f"Topper_Leg_{i}" for i in range(1, leg_count+1)],
-        "note": "v1.2.6: unified textbase, separate beveled leg objects, two stronger explicit bridge pads between lines, tighter spacing.",
+        "note": "v1.2.7: unified textbase, separate beveled leg objects, two stronger explicit bridge pads between lines, tighter spacing.",
     }
 
     return export_bundle(

@@ -197,7 +197,7 @@ def _build_scene(
     preview_mask,
     meta_extra=None,
 ):
-    logger.info("STAMP BUILD START v1.2.6 | %s", name)
+    logger.info("STAMP BUILD START v1.2.7 | %s", name)
 
     nominal, rw, rh = parse_size(base_size, base_shape)
 
@@ -228,7 +228,7 @@ def _build_scene(
 
     scene = trimesh.Scene()
     if layout_mode == "separate":
-        # v1.2.6:
+        # v1.2.7:
         # Objects are still separate in 3MF, but placed in the correct assembled position.
         # No more "letters flying away" in slicer.
         scene.add_geometry(base.copy(), geom_name=base_name, node_name=base_name)
