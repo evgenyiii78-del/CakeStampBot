@@ -1,4 +1,27 @@
-# CakeStampBot v1.2.4 — No ZIP Export
+# CakeStampBot v1.2.6 — Stamp Separate Layout Fix
+
+Исправления штампа:
+
+- превью штампа снова показывает текст на подложке;
+- в `stamp_SEPARATE.3mf` база и рельеф остаются отдельными объектами, но больше не разлетаются по сцене;
+- `Relief` теперь расположен на базе по Z = `BASE_H`;
+- все предыдущие правки сохранены:
+  - ZIP отключён;
+  - сглаживание штампа сохранено;
+  - точная толщина линии сохранена;
+  - ножка топпера отдельная и со срезом.
+
+# CakeStampBot v1.2.6 — Beveled Topper Leg
+
+Изменение топпера:
+
+- ножка топпера остаётся отдельным объектом;
+- ширина ножки остаётся 3 мм;
+- нижний конец ножки теперь со срезом с одной стороны;
+- ножку легче вставлять в торт;
+- ZIP по-прежнему отключён: бот отправляет только PNG и 3MF.
+
+# CakeStampBot v1.2.6 — No ZIP Export
 
 Изменение:
 
@@ -10,7 +33,7 @@
 
 Это уменьшает мусор в Telegram и упрощает выдачу результата.
 
-# CakeStampBot v1.2.4 — More Smooth Stamp
+# CakeStampBot v1.2.6 — More Smooth Stamp
 
 Усилено сглаживание текстового штампа:
 
@@ -23,14 +46,14 @@
 
 Толщина линии должна остаться управляемой, а линии должны стать заметно плавнее.
 
-# CakeStampBot v1.2.4 — Fit Smooth Then Stroke
+# CakeStampBot v1.2.6 — Fit Smooth Then Stroke
 
 Исправление угловатых линий штампа:
 - порядок теперь: `mask → centerline → fit → smooth centerline → stroke exact width`
 - толщина линии остаётся точной;
 - центральная линия сглаживается перед построением stroke.
 
-# CakeStampBot v1.2.4 — Centerline Stamp Core
+# CakeStampBot v1.2.6 — Centerline Stamp Core
 
 Исправление текстового штампа:
 
@@ -40,7 +63,7 @@
 - полнотелые буквы убраны, двойная пустая обводка тоже убрана.
 
 
-# CakeStampBot v1.2.4 — Solid Vector Text Stamp
+# CakeStampBot v1.2.6 — Solid Vector Text Stamp
 
 Исправление текстового штампа:
 
@@ -51,7 +74,7 @@
 - режим картинки для штампа пока остаётся image centerline.
 
 
-# CakeStampBot v1.2.4 — Vector Stamp Core
+# CakeStampBot v1.2.6 — Vector Stamp Core
 
 Главное изменение этой версии:
 
@@ -62,9 +85,9 @@
 - режим картинки для штампа пока оставлен на raster centerline.
 
 
-# CakeStampBot v1.2.4 Fast Vector Core
+# CakeStampBot v1.2.6 Fast Vector Core
 
-Hotfix после v1.2.4:
+Hotfix после v1.2.6:
 
 - векторный топпер оставлен, но уменьшена чрезмерная детализация;
 - curve steps снижены до 20;
@@ -76,7 +99,7 @@ Hotfix после v1.2.4:
 Цель: сохранить плавные буквы, но вернуть генерацию к нормальному времени на Bothost.
 
 
-# CakeStampBot v1.2.4 Core Rewrite
+# CakeStampBot v1.2.6 Core Rewrite
 
 Это первая версия нового геометрического ядра.
 
@@ -169,5 +192,5 @@ python scripts/smoke_test.py
 Ожидаемый результат:
 
 ```text
-Smoke test PASS v1.2.4
+Smoke test PASS v1.2.6
 ```

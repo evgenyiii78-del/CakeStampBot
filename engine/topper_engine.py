@@ -67,7 +67,7 @@ def _connect_components(shape, bridge_width=2.0):
 
 def _force_two_line_bridges(base_shape, bridge_width=3.0):
     """
-    v1.2.4:
+    v1.2.6:
     Create two deliberate vertical bridge pads between two text lines.
 
     The old method sometimes found tiny accidental nearest links.
@@ -150,6 +150,37 @@ def _force_two_line_bridges(base_shape, bridge_width=3.0):
     return unary_union([base_shape] + bridges).buffer(0)
 
 
+def _make_beveled_leg_mesh(name, width=3.0, length=45.0, height=2.8):
+    """
+    Separate topper leg with a one-sided bevel at the insertion end.
+    XY shape is mostly 3 mm wide, but the bottom tip has a diagonal cut
+    so it is easier to insert into cake.
+    """
+    from shapely.geometry import Polygon
+
+    w = float(width)
+    L = float(length)
+    bevel = min(8.0, L * 0.22)
+
+    # Coordinates: top near y=+L/2, insertion end at y=-L/2.
+    # One side is cut diagonally: easier to pierce, still printable flat.
+    pts = [
+        (-w / 2.0,  L / 2.0),
+        ( w / 2.0,  L / 2.0),
+        ( w / 2.0, -L / 2.0 + bevel),
+        (-w / 2.0, -L / 2.0),
+    ]
+
+    shape = Polygon(pts).buffer(0)
+
+    # Tiny fillet to avoid razor-stress corners, without making it fat.
+    shape = shape.buffer(0.08, resolution=16, join_style=1).buffer(-0.08, resolution=16).buffer(0)
+
+    mesh = extrude_shape(shape, height, name)
+    mesh.metadata["name"] = name
+    return mesh
+
+
 def _make_leg_meshes(width_mm: float, legs: str, backing_bounds, backing_height: float, text_height: float):
     minx, miny, maxx, maxy = backing_bounds
     if legs == "two":
@@ -167,16 +198,15 @@ def _make_leg_meshes(width_mm: float, legs: str, backing_bounds, backing_height:
 
     leg_meshes = []
     for i, x in enumerate(xs):
-        raw = box(
-            x - LEG_W / 2.0,
-            -LEG_LEN / 2.0,
-            x + LEG_W / 2.0,
-            LEG_LEN / 2.0,
+        leg_mesh = _make_beveled_leg_mesh(
+            f"Topper_Leg_{i+1}",
+            width=LEG_W,
+            length=LEG_LEN,
+            height=max(backing_height, min(2.8, text_height)),
         )
-        # very light fillet so it remains visually square 3x3
-        leg_shape = raw.buffer(0.18, resolution=24, join_style=1).buffer(-0.18, resolution=24).buffer(0)
-        leg_mesh = extrude_shape(leg_shape, max(backing_height, min(2.8, text_height)), f"Topper_Leg_{i+1}")
-        leg_mesh.metadata["name"] = f"Topper_Leg_{i+1}"
+        # Keep legs separate, but place them near/aside from textbase in slicer.
+        # The caller shifts them to the left, so here only center X is applied.
+        leg_mesh.apply_translation([x, 0, 0])
         leg_meshes.append(leg_mesh)
 
     return leg_meshes, count
@@ -193,14 +223,14 @@ def build_topper_from_text(
     legs="auto",
 ):
     """
-    v1.2.4:
+    v1.2.6:
     - TextBase is one unified object: text-shaped backing + bridges.
     - Leg(s) are separate objects in 3MF so user can position them in slicer.
     - Reduced line spacing.
     - Two explicit bridges between lines for 2-line text.
     """
     logger.info(
-        "TOPPER BUILD START v1.2.4 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
+        "TOPPER BUILD START v1.2.6 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
         width_mm, font_choice, text_height, backing_height, legs
     )
 
@@ -263,7 +293,7 @@ def build_topper_from_text(
     scene.add_geometry(text_mesh, geom_name="Topper_Text", node_name="Topper_Text")
 
     for i, leg_mesh in enumerate(leg_meshes, start=1):
-        # Put separate leg(s) aside in XY so preview in slicer shows them detached.
+        # Put separate beveled leg(s) aside in XY so preview in slicer shows them detached.
         shifted = leg_mesh.copy()
         # place to the left of the textbase by default
         minx, miny, maxx, maxy = backing_shape.bounds
@@ -282,7 +312,7 @@ def build_topper_from_text(
         "topper",
         "topper",
         mask,
-        note=f"Topper v1.2.4, TextBase + separate {leg_count} leg(s), spacing 0.82"
+        note=f"Topper v1.2.6, TextBase + separate {leg_count} leg(s), spacing 0.82"
     )
 
     meta = {
@@ -301,7 +331,7 @@ def build_topper_from_text(
         "leg_length_mm": LEG_LEN,
         "legs": leg_count,
         "objects": ["Topper_TextBase", "Topper_Text"] + [f"Topper_Leg_{i}" for i in range(1, leg_count+1)],
-        "note": "v1.2.4: unified textbase, separate leg objects, two stronger explicit bridge pads between lines, tighter spacing.",
+        "note": "v1.2.6: unified textbase, separate beveled leg objects, two stronger explicit bridge pads between lines, tighter spacing.",
     }
 
     return export_bundle(

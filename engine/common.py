@@ -270,11 +270,22 @@ def preview(path,title,mode,mask=None,note=''):
 
     if mode=='stamp':
         d.ellipse((70,70,930,930),fill=(228,192,120),outline=(130,95,45),width=6)
-        text_box=(680,430)
-        text_y=285
+
+        # v1.2.6: stamp preview always shows the text/relief centered on the base,
+        # even when 3MF layout is SEPARATE.
+        if mask is not None:
+            mi=Image.fromarray((mask.astype(np.uint8)*255),mode='L')
+            bb=mi.getbbox()
+            if bb:
+                cr=mi.crop(bb)
+                cr.thumbnail((620,360),Image.Resampling.LANCZOS)
+                x=(1000-cr.width)//2
+                y=(1000-cr.height)//2 + 20
+                col=Image.new('RGB',cr.size,(80,55,22))
+                img.paste(col,(x,y),cr)
+
     else:
         # Topper preview: text-shaped backing + one slim leg.
-        # Draw a soft backing silhouette under the mask if available.
         if mask is not None:
             mi=Image.fromarray((mask.astype(np.uint8)*255),mode='L')
             bb=mi.getbbox()
@@ -283,24 +294,19 @@ def preview(path,title,mode,mask=None,note=''):
                 cr.thumbnail((760,220),Image.Resampling.LANCZOS)
                 x=(1000-cr.width)//2
                 y=290
-                # Backing shadow slightly wider than letters
                 back = cr.filter(ImageFilter.GaussianBlur(radius=4))
                 back = back.point(lambda p: 220 if p>0 else 0)
                 back_rgb = Image.new('RGBA', back.size, (185,185,180,0))
                 alpha = back.point(lambda p: 235 if p>0 else 0)
                 back_rgb.putalpha(alpha)
                 img.paste(back_rgb, (x,y), back_rgb)
-                # slim leg
                 leg = Image.new('RGBA',(36,360),(185,185,180,235))
                 leg = leg.filter(ImageFilter.GaussianBlur(radius=0.4))
                 img.paste(leg, (482,470), leg)
-                # text
                 col=Image.new('RGB',cr.size,(55,92,205))
                 img.paste(col,(x,y),cr)
-        text_box=(760,150)
-        text_y=335
 
-    d.text((120,70),f'CakeStampBot v1.2.4 — {mode.upper()}',fill=(30,30,30))
+    d.text((120,70),f'CakeStampBot v1.2.6 — {mode.upper()}',fill=(30,30,30))
     d.text((120,910),note or title[:70],fill=(30,30,30))
     img.save(path)
 
@@ -341,7 +347,7 @@ def make_rounded_box_mesh(
 
 def export_bundle(output,name,scene,preview_png,stls,meta,suffix):
     """
-    v1.2.4:
+    v1.2.6:
     ZIP export removed. Bot sends only PNG preview and 3MF.
     STL files may still be written internally for debugging/export, but no ZIP is created.
     """

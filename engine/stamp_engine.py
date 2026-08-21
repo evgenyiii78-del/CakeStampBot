@@ -197,7 +197,7 @@ def _build_scene(
     preview_mask,
     meta_extra=None,
 ):
-    logger.info("STAMP BUILD START v1.2.4 | %s", name)
+    logger.info("STAMP BUILD START v1.2.6 | %s", name)
 
     nominal, rw, rh = parse_size(base_size, base_shape)
 
@@ -228,18 +228,20 @@ def _build_scene(
 
     scene = trimesh.Scene()
     if layout_mode == "separate":
-        b = base.copy()
-        b.apply_translation([-nominal * 0.90, 0, 0])
-        scene.add_geometry(b, geom_name=base_name, node_name=base_name)
+        # v1.2.6:
+        # Objects are still separate in 3MF, but placed in the correct assembled position.
+        # No more "letters flying away" in slicer.
+        scene.add_geometry(base.copy(), geom_name=base_name, node_name=base_name)
 
         r = relief.copy()
-        r.apply_translation([nominal * 0.25, 8, 0])
+        r.apply_translation([0, 0, BASE_H])
         scene.add_geometry(r, geom_name="Relief", node_name="Relief")
 
         if heart is not None:
             h = heart.copy()
-            h.apply_translation([nominal * 0.85, 0, 0])
+            h.apply_translation([0, 0, BASE_H])
             scene.add_geometry(h, geom_name="Heart", node_name="Heart")
+
         suffix = "stamp_SEPARATE"
     else:
         scene.add_geometry(base.copy(), geom_name=base_name, node_name=base_name)
@@ -255,7 +257,7 @@ def _build_scene(
         suffix = "stamp_ASSEMBLED"
 
     pp = str(output / f"{name}_preview.png")
-    preview(pp, name, "stamp", preview_mask, note=f"Fit→StrongSmooth→Stroke {line_width:.2f} mm")
+    preview(pp, name, "stamp", preview_mask, note=f"Fit→StrongSmooth→Stroke layout-fixed {line_width:.2f} mm")
 
     meta = {
         "version": "1.2.3",
