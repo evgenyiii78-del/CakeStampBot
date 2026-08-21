@@ -29,7 +29,7 @@ class _FlattenGlyphPen(BasePen):
     Converts glyph contours to high-resolution point rings.
     We avoid raster text entirely for topper geometry.
     """
-    def __init__(self, glyph_set, curve_steps=24):
+    def __init__(self, glyph_set, curve_steps=16):
         super().__init__(glyph_set)
         self.curve_steps = int(curve_steps)
         self.contours = []
@@ -103,8 +103,8 @@ class _FlattenGlyphPen(BasePen):
         self._closePath()
 
 
-def _glyph_to_shape(glyph, glyph_set, curve_steps=28):
-    pen = _FlattenGlyphPen(glyph_set, curve_steps=curve_steps)
+def _glyph_to_shape(glyph, glyph_set, curve_steps=18):
+    pen = _FlattenGlyphPen(glyph_set, curve_steps=min(int(curve_steps), 20))
     glyph.draw(pen)
     pen._closePath()
 
@@ -125,7 +125,7 @@ def _glyph_to_shape(glyph, glyph_set, curve_steps=28):
     if result is None:
         return None
 
-    return result.buffer(0)
+    return result.buffer(0).simplify(0.0008, preserve_topology=True).buffer(0)
 
 
 @dataclass
@@ -143,7 +143,7 @@ def text_to_shape(
     target_width_mm: float = 110.0,
     target_height_mm: float = 45.0,
     line_spacing: float = 1.16,
-    curve_steps: int = 32,
+    curve_steps: int = 20,
 ) -> VectorTextResult:
     """
     Convert TTF glyph outlines directly to Shapely polygons in millimeters.
@@ -194,7 +194,7 @@ def text_to_shape(
         for gname, adv in zip(glyph_names, advances):
             if gname is not None:
                 glyph = glyph_set[gname]
-                gshape = _glyph_to_shape(glyph, glyph_set, curve_steps=curve_steps)
+                gshape = _glyph_to_shape(glyph, glyph_set, curve_steps=min(int(curve_steps), 20))
                 if gshape is not None and not gshape.is_empty:
                     geoms.append(affinity.translate(gshape, xoff=x_cursor, yoff=y_cursor))
             x_cursor += adv
@@ -218,7 +218,7 @@ def text_to_shape(
         shape,
         xoff=-(minx + maxx) / 2.0,
         yoff=-(miny + maxy) / 2.0,
-    ).buffer(0)
+    ).buffer(0).simplify(0.018, preserve_topology=True).buffer(0)
 
     minx, miny, maxx, maxy = shape.bounds
     return VectorTextResult(

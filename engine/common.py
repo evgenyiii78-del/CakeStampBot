@@ -119,10 +119,10 @@ def mask_to_centerline_shape(mask, px_per_mm=24, line_width=.45, smooth=.30):
         line=line.simplify(smooth,preserve_topology=False)
         if line.length<.65: continue
         line=resample(line,.10)
-        geoms.append(line.buffer(line_width/2,cap_style=1,join_style=1,resolution=128))
+        geoms.append(line.buffer(line_width/2,cap_style=1,join_style=1,resolution=48))
     if not geoms: return None
     merged=unary_union(geoms).buffer(0); eps=max(.018,line_width*.10)
-    return merged.buffer(eps,resolution=128).buffer(-eps,resolution=128).buffer(0).simplify(.015,preserve_topology=True).buffer(0)
+    return merged.buffer(eps,resolution=48).buffer(-eps,resolution=48).buffer(0).simplify(.015,preserve_topology=True).buffer(0)
 
 def extrude_poly(poly,height,z0=0):
     if poly.is_empty or poly.area<=0: return None
@@ -179,7 +179,7 @@ def parse_size(val, shape='round'):
 def heart_mesh(line_width,height,y=-31):
     t=np.linspace(0,2*np.pi,320); x=16*np.sin(t)**3; yy=13*np.cos(t)-5*np.cos(2*t)-2*np.cos(3*t)-np.cos(4*t)
     x=(x-x.min())/(x.max()-x.min())*12; yy=(yy-yy.min())/(yy.max()-yy.min())*10; x-= (x.max()+x.min())/2; yy-= (yy.max()+yy.min())/2
-    m=extrude_shape(LineString(np.c_[x,yy]).buffer(line_width/2,cap_style=1,join_style=1,resolution=128),height,'Heart'); m.apply_translation([0,y,0]); return m
+    m=extrude_shape(LineString(np.c_[x,yy]).buffer(line_width/2,cap_style=1,join_style=1,resolution=48),height,'Heart'); m.apply_translation([0,y,0]); return m
 
 def preview(path,title,mode,mask=None,note=''):
     img=Image.new('RGB',(1000,1000),(246,243,235))
@@ -217,7 +217,7 @@ def preview(path,title,mode,mask=None,note=''):
         text_box=(760,150)
         text_y=335
 
-    d.text((120,70),f'CakeStampBot v1.0.0 — {mode.upper()}',fill=(30,30,30))
+    d.text((120,70),f'CakeStampBot v1.0.1 — {mode.upper()}',fill=(30,30,30))
     d.text((120,910),note or title[:70],fill=(30,30,30))
     img.save(path)
 
@@ -250,7 +250,7 @@ def make_rounded_box_mesh(
         center_x + width / 2,
         center_y + depth / 2 - radius,
     )
-    shape = unary_union([base, side]).buffer(radius, resolution=128, cap_style=1, join_style=1).buffer(0)
+    shape = unary_union([base, side]).buffer(radius, resolution=48, cap_style=1, join_style=1).buffer(0)
     mesh = extrude_shape(shape, height, name)
     mesh.apply_translation([0, 0, z0])
     return mesh
