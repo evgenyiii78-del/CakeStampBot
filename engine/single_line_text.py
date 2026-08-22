@@ -63,25 +63,34 @@ def _glyph(ch):
     ls=[LineString(p) for p in paths if len(p)>=2]
     return ls[0] if len(ls)==1 else MultiLineString(ls)
 
-def text_to_single_lines(text,target_width_mm,target_height_mm,line_spacing=1.08,tracking=.12):
-    lines=str(text or "").splitlines()
-    geoms=[]
-    y=0.0
+ADVANCE={"ж":1.18,"м":1.10,"ш":1.10,"щ":1.16,"ю":1.08,"и":.92,"н":.92,"п":.92,"л":.94,"к":.92,"т":.88,"о":.90,"с":.86,"е":.86,"р":.88,"в":.86,"а":.86,"б":.88,"я":.90,"ы":.98,"ь":.80,"ъ":.88,"й":.92,"у":.88,"ч":.86,"з":.82,"х":.86,"ф":1.0,"ц":.92,"э":.86,"д":.98}
+for _k,_v in list(ADVANCE.items()): ADVANCE[_k.upper()]=_v
+def _advance(ch): return .43 if ch.isspace() else ADVANCE.get(ch,.90)
+
+def text_to_single_lines(text,target_width_mm,target_height_mm,line_spacing=1.04,tracking=.075):
+    lines=str(text or "").splitlines() or [""]
+    geoms=[]; y=0.0
     for line in lines:
-        widths=[.46 if c.isspace() else 1.0 for c in line]
-        total=sum(widths)+tracking*max(0,len(widths)-1)
-        x=-total/2
+        widths=[_advance(c) for c in line]
+        total=sum(widths)+tracking*max(0,len(widths)-1); x=-total/2.0
         for c,w in zip(line,widths):
             if not c.isspace():
                 g=_glyph(c)
-                if g is not None: geoms.append(affinity.translate(g,xoff=x,yoff=-y))
+                if g is not None:
+                    x0,y0,x1,y1=g.bounds; gw=max(x1-x0,1e-6)
+                    gs=min(1.0,(w*.90)/gw)
+                    g=affinity.scale(g,xfact=gs,yfact=1.0,origin=(0,0))
+                    x0,y0,x1,y1=g.bounds
+                    g=affinity.translate(g,xoff=x+(w-(x1-x0))/2-x0,yoff=-y)
+                    geoms.append(g)
             x+=w+tracking
         y+=1.18*line_spacing
+    if not geoms: raise ValueError("No supported glyph geometry")
     geom=unary_union(geoms)
-    minx,miny,maxx,maxy=geom.bounds
-    scale=min(target_width_mm/max(maxx-minx,1e-6),target_height_mm/max(maxy-miny,1e-6))
+    x0,y0,x1,y1=geom.bounds
+    scale=min(target_width_mm/max(x1-x0,1e-6),target_height_mm/max(y1-y0,1e-6))
     geom=affinity.scale(geom,xfact=scale,yfact=scale,origin=(0,0))
-    minx,miny,maxx,maxy=geom.bounds
-    geom=affinity.translate(geom,xoff=-(minx+maxx)/2,yoff=-(miny+maxy)/2)
-    minx,miny,maxx,maxy=geom.bounds
-    return StrokeTextResult(geom,maxx-minx,maxy-miny)
+    x0,y0,x1,y1=geom.bounds
+    geom=affinity.translate(geom,xoff=-(x0+x1)/2,yoff=-(y0+y1)/2)
+    x0,y0,x1,y1=geom.bounds
+    return StrokeTextResult(geom,x1-x0,y1-y0)
