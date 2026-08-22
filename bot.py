@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import uuid
 import asyncio
@@ -171,7 +171,7 @@ def topper_backing_keyboard() -> InlineKeyboardMarkup:
 
 
 def topper_legs_keyboard() -> InlineKeyboardMarkup:
-    # В v1.6.1 поддерживаются также старые callback-префиксы legs:*
+    # В v1.6.5 поддерживаются также старые callback-префиксы legs:*
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("Авто", callback_data="topper_legs:auto")],
@@ -267,7 +267,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_update(update, "COMMAND /start")
     context.user_data.clear()
     await update.message.reply_text(
-        "CakeStampBot v1.6.1\n\n"
+        "CakeStampBot v1.6.5\n\n"
         "Оставили только два режима:\n"
         "🍰 Штамп — сглаженный текстовый centerline с точной толщиной линии.\n"
         "🎂 Топпер — TextBase по буквам, две перемычки между строками, две ножки отдельно, низ со срезом.",
@@ -279,7 +279,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_update(update, "COMMAND /help")
     await update.message.reply_text(
-        "Помощь CakeStampBot v1.6.1\n\n"
+        "Помощь CakeStampBot v1.6.5\n\n"
         "🍰 Штамп: текст или картинка → PNG + 3MF; имя 3MF берётся из текста.\n"
         "🎂 Топпер: текст → единая модель с подложкой под буквами и ножками.\n\n"
         "Вырубка удалена из проекта.",
@@ -472,7 +472,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await query.edit_message_text("Сколько ножек сделать?", reply_markup=topper_legs_keyboard())
             return
 
-        # v1.6.1: поддерживаем topper_legs:*, topper_leg:* и старый legs:*.
+        # v1.6.5: поддерживаем topper_legs:*, topper_leg:* и старый legs:*.
         if data.startswith("topper_legs:") or data.startswith("topper_leg:") or data.startswith("legs:"):
             ensure_topper_defaults(context)
             context.user_data["topper_legs"] = data.split(":", 1)[1]
@@ -505,7 +505,7 @@ async def enqueue_job(message, context: ContextTypes.DEFAULT_TYPE) -> None:
     params = dict(context.user_data)
     chat_id = message.chat_id
 
-    # v1.6.1 hotfix: do not enqueue a topper job without saved text.
+    # v1.6.5 hotfix: do not enqueue a topper job without saved text.
     # This prevents the old error: KeyError('text').
     if params.get("mode") == "topper" and not params.get("text"):
         logger.warning("TOPPER CREATE WITHOUT TEXT | chat_id=%s params=%s", chat_id, params)
@@ -666,10 +666,11 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_error_handler(error_handler)
 
-    logger.info("CakeStampBot v1.6.1 started")
-    print("CakeStampBot v1.6.1 started")
+    logger.info("CakeStampBot v1.6.5 started")
+    print("CakeStampBot v1.6.5 started")
     app.run_polling()
 
 
 if __name__ == "__main__":
     main()
+
