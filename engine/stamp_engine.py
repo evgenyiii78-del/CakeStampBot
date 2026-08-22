@@ -205,7 +205,7 @@ def _smooth_text_centerlines(geom):
 
 def _build_text_relief_v130(mask, px_per_mm, target_w, target_h, line_width):
     """
-    v1.6.1 text-only core:
+    v1.6.2 text-only core:
       high-res text mask -> medial centerline -> fit -> cubic spline -> exact-width stroke.
     The old text pipeline remains available as a fallback.
     """
@@ -261,6 +261,77 @@ def _build_relief_from_mask(mask, px_per_mm, target_w, target_h, line_width):
     return relief_shape
 
 
+
+def _ttf_outline_to_exact_centerline_stroke(outline_shape, line_width, raster_px_per_mm=42):
+    """
+    STAMP ONLY — v1.6.2.
+
+    The TTF engine gives us the real filled glyph outline.  A filled TTF outline
+    cannot have an arbitrary 0.35 mm stroke width by definition, so for stamps
+    we derive a medial centerline from that REAL TTF geometry, smooth it, and
+    buffer the centerline to the requested physical width.
+
+    Result:
+      real TTF proportions -> centerline -> exact line_width mm stroke.
+
+    Topper code is intentionally not involved.
+    """
+    if outline_shape is None or outline_shape.is_empty:
+        raise RuntimeError("Пустая TTF-геометрия.")
+
+    minx, miny, maxx, maxy = outline_shape.bounds
+    pad_mm = 2.0
+    ppm = int(max(28, min(60, raster_px_per_mm)))
+    width_px = max(64, int(round((maxx - minx + 2 * pad_mm) * ppm)))
+    height_px = max(64, int(round((maxy - miny + 2 * pad_mm) * ppm)))
+
+    mask = Image.new("L", (width_px, height_px), 0)
+    draw = ImageDraw.Draw(mask)
+
+    def xy(x, y):
+        px = (x - minx + pad_mm) * ppm
+        py = (maxy - y + pad_mm) * ppm
+        return (float(px), float(py))
+
+    polys = []
+    if outline_shape.geom_type == "Polygon":
+        polys = [outline_shape]
+    elif outline_shape.geom_type == "MultiPolygon":
+        polys = list(outline_shape.geoms)
+    elif hasattr(outline_shape, "geoms"):
+        polys = [g for g in outline_shape.geoms if g.geom_type == "Polygon"]
+
+    for poly in polys:
+        draw.polygon([xy(x, y) for x, y in poly.exterior.coords], fill=255)
+        for ring in poly.interiors:
+            draw.polygon([xy(x, y) for x, y in ring.coords], fill=0)
+
+    centerline = mask_to_centerline_line(mask, ppm)
+    if centerline is None or centerline.is_empty:
+        raise RuntimeError("Не удалось получить centerline из TTF.")
+
+    # mask_to_centerline_line centers geometry on the raster canvas.
+    # Re-center explicitly, then apply the stamp-only cleanup/smoothing.
+    bx0, by0, bx1, by1 = centerline.bounds
+    centerline = translate(
+        centerline,
+        xoff=-(bx0 + bx1) / 2.0,
+        yoff=-(by0 + by1) / 2.0,
+    )
+    centerline = _remove_tiny_centerline_parts(centerline, min_length_mm=0.30)
+    centerline = _smooth_text_centerlines(centerline)
+    centerline = _remove_tiny_centerline_parts(centerline, min_length_mm=0.28)
+
+    stroke = _stroke_clean_single_line(centerline, float(line_width))
+    if stroke is None or stroke.is_empty:
+        raise RuntimeError("Не удалось построить точный TTF stroke.")
+
+    # Minimal topology repair only; do not inflate the requested width.
+    stroke = stroke.buffer(0)
+    return stroke
+
+
+
 def build_stamp_from_text(
     text,
     output_dir,
@@ -278,7 +349,7 @@ def build_stamp_from_text(
 
     mask = render_text_mask(text, 82, PX_TEXT, font_choice)
 
-    # v1.6.1 True Single-Line Text.
+    # v1.6.2 True Single-Line Text.
     # Supported Cyrillic is generated directly as pen trajectories:
     # no raster -> skeleton -> branch artifacts.
     active_font_path = None
@@ -292,11 +363,18 @@ def build_stamp_from_text(
             line_spacing=0.90,
             curve_steps=22,
         )
-        relief_shape = ttf_text.geometry
-        geometry_core = "real_ttf_vector_outline"
+        # v1.6.2: TTF outline defines the glyph STYLE, not the final physical
+        # line thickness. Convert it to a smooth centerline and stroke that
+        # centerline to the user's requested width (e.g. exactly 0.35 mm).
+        relief_shape = _ttf_outline_to_exact_centerline_stroke(
+            ttf_text.geometry,
+            line_width=float(line_width),
+            raster_px_per_mm=42,
+        )
+        geometry_core = "real_ttf_centerline_exact_width"
         active_font_path = ttf_text.font_path
     except Exception:
-        logger.info("v1.6.1 single-line fallback to v1.3 core", exc_info=True)
+        logger.info("v1.6.2 single-line fallback to v1.3 core", exc_info=True)
         try:
             relief_shape = _build_text_relief_v130(mask, PX_TEXT, target_w, target_h, line_width)
             geometry_core = "text_v1_3_fallback"
@@ -317,13 +395,15 @@ def build_stamp_from_text(
         add_heart=add_heart,
         layout_mode=layout_mode,
         preview_mask=mask,
-        preview_shape=relief_shape if geometry_core in ("real_ttf_vector_outline","true_single_line_cyrillic_exact_stroke") else None,
+        preview_shape=relief_shape if geometry_core in ("real_ttf_centerline_exact_width","real_ttf_vector_outline","true_single_line_cyrillic_exact_stroke") else None,
         meta_extra={
             "geometry_core": geometry_core,
-            "stamp_text_mode": "real_ttf_vector_fonts_with_safe_fallback",
+            "stamp_text_mode": "real_ttf_style_centerline_exact_width",
             "single_line_font_style": font_choice,
             "ttf_font_path": active_font_path,
             "ttf_line_spacing": 0.90,
+            "requested_stroke_width_mm": float(line_width),
+            "stroke_width_mode": "exact_centerline_buffer",
             "px_per_mm": PX_TEXT,
         },
     )
@@ -387,7 +467,7 @@ def _preview_exact_geometry(path, name, relief_shape, base_shape, nominal, rw, r
         for ring in poly.interiors:
             hole=[xy(x,y) for x,y in ring.coords]
             d.polygon(hole,fill=(232,195,121))
-    d.text((25,20),f"CakeStampBot v1.6.1 STAMP — exact 3MF geometry",fill=(45,45,45))
+    d.text((25,20),f"CakeStampBot v1.6.2 STAMP — exact 3MF geometry",fill=(45,45,45))
     if note:d.text((25,H-35),note,fill=(70,70,70))
     img.save(path)
 
@@ -405,7 +485,7 @@ def _build_scene(
     meta_extra=None,
     preview_shape=None,
 ):
-    logger.info("STAMP BUILD START v1.6.1 | %s", name)
+    logger.info("STAMP BUILD START v1.6.2 | %s", name)
 
     nominal, rw, rh = parse_size(base_size, base_shape)
 
@@ -436,7 +516,7 @@ def _build_scene(
 
     scene = trimesh.Scene()
     if layout_mode == "separate":
-        # v1.6.1:
+        # v1.6.2:
         # Objects are still separate in 3MF, but placed in the correct assembled position.
         # No more "letters flying away" in slicer.
         scene.add_geometry(base.copy(), geom_name=base_name, node_name=base_name)
@@ -472,7 +552,7 @@ def _build_scene(
         preview(pp, name, "stamp", preview_mask, note=f"Fallback centerline {line_width:.2f} mm")
 
     meta = {
-        "version": "1.5.0",
+        "version": "1.6.2",
         "mode": "stamp",
         "base_shape": base_shape,
         "base_size": base_size,

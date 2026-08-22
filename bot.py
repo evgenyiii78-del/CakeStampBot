@@ -214,12 +214,25 @@ def ensure_topper_defaults(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.setdefault("topper_legs", "auto")
 
 
+
+def stamp_font_name(context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Человекочитаемое имя выбранного шрифта для подтверждения штампа."""
+    choice = str(context.user_data.get("font_choice", "classic")).strip().lower()
+    names = {
+        "classic": "Classic",
+        "comic": "Comic Sans",
+        "gost": "GOST",
+    }
+    return names.get(choice, choice or "Classic")
+
+
 def stamp_summary_text(context: ContextTypes.DEFAULT_TYPE) -> str:
     return (
         "Проверь настройки штампа:\n\n"
         f"• источник: {'текст' if context.user_data.get('source') == 'text' else 'картинка'}\n"
         f"• размер: {str(context.user_data.get('base_size', '105')).replace('x', '×')} мм\n"
         f"• форма: {'круглая' if context.user_data.get('base_shape') == 'round' else 'прямоугольная'}\n"
+        f"• шрифт: {stamp_font_name(context)}\n"
         f"• линия: {context.user_data.get('line_width', 0.45)} мм\n"
         f"• сердце: {'да' if context.user_data.get('add_heart') else 'нет'}\n"
         f"• раскладка: {'собрать' if context.user_data.get('layout_mode') == 'assembled' else 'отдельно'}"

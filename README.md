@@ -1,3 +1,11 @@
+# CakeStampBot v1.6.3 — Stamp Font Summary
+
+Небольшая UI-правка поверх v1.6.2:
+- в экране «Проверь настройки штампа» теперь показывается выбранный стиль шрифта;
+- Classic / Comic Sans / GOST отображаются человекочитаемо;
+- геометрия Stamp v1.6.2 не менялась;
+- Topper engine не менялся.
+
 # CakeStampBot v1.6.1 — Engine Isolation Fix
 
 Архитектура разделена:
