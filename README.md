@@ -1,3 +1,7 @@
+# CakeStampBot v1.6.5 — Stamp Spur Fix
+
+Точечный фикс только STAMP: усилена очистка коротких terminal-spur ветвей, включая микро-усик на строчной «е». Толщина 0.35 мм сохранена. Topper engine не изменён.
+
 # CakeStampBot v1.6.4 — Stamp Artifact Cleanup
 
 Точечная правка только STAMP: удаление коротких паразитных terminal-spur ветвей centerline до формирования stroke. Толщина 0.35 мм, TTF-форма, масштаб и межстрочный интервал сохранены. Topper не изменён.
