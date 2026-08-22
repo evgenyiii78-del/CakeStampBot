@@ -205,7 +205,7 @@ def _smooth_text_centerlines(geom):
 
 def _build_text_relief_v130(mask, px_per_mm, target_w, target_h, line_width):
     """
-    v1.4.1 text-only core:
+    v1.5.0 text-only core:
       high-res text mask -> medial centerline -> fit -> cubic spline -> exact-width stroke.
     The old text pipeline remains available as a fallback.
     """
@@ -278,7 +278,7 @@ def build_stamp_from_text(
 
     mask = render_text_mask(text, 82, PX_TEXT, font_choice)
 
-    # v1.4.1 True Single-Line Text.
+    # v1.5.0 True Single-Line Text.
     # Supported Cyrillic is generated directly as pen trajectories:
     # no raster -> skeleton -> branch artifacts.
     try:
@@ -288,15 +288,14 @@ def build_stamp_from_text(
             text,
             target_width_mm=max(8.0, target_w - 6.0),
             target_height_mm=max(8.0, target_h - 6.0),
-            line_spacing=1.08,
-            tracking=0.12,
+            font_choice=font_choice,
         )
         relief_shape = _stroke_clean_single_line(stroke_text.geometry, line_width)
         if relief_shape is None or relief_shape.is_empty:
             raise RuntimeError("empty single-line stroke")
         geometry_core = "true_single_line_cyrillic_exact_stroke"
     except Exception:
-        logger.info("v1.4.1 single-line fallback to v1.3 core", exc_info=True)
+        logger.info("v1.5.0 single-line fallback to v1.3 core", exc_info=True)
         try:
             relief_shape = _build_text_relief_v130(mask, PX_TEXT, target_w, target_h, line_width)
             geometry_core = "text_v1_3_fallback"
@@ -320,7 +319,8 @@ def build_stamp_from_text(
         preview_shape=relief_shape if geometry_core == "true_single_line_cyrillic_exact_stroke" else None,
         meta_extra={
             "geometry_core": geometry_core,
-            "stamp_text_mode": "true_single_line_cyrillic_with_safe_fallback",
+            "stamp_text_mode": "multi_true_single_line_fonts_with_safe_fallback",
+            "single_line_font_style": font_choice,
             "px_per_mm": PX_TEXT,
         },
     )
@@ -384,7 +384,7 @@ def _preview_exact_geometry(path, name, relief_shape, base_shape, nominal, rw, r
         for ring in poly.interiors:
             hole=[xy(x,y) for x,y in ring.coords]
             d.polygon(hole,fill=(232,195,121))
-    d.text((25,20),f"CakeStampBot v1.4.1 STAMP — exact 3MF geometry",fill=(45,45,45))
+    d.text((25,20),f"CakeStampBot v1.5.0 STAMP — exact 3MF geometry",fill=(45,45,45))
     if note:d.text((25,H-35),note,fill=(70,70,70))
     img.save(path)
 
@@ -402,7 +402,7 @@ def _build_scene(
     meta_extra=None,
     preview_shape=None,
 ):
-    logger.info("STAMP BUILD START v1.4.1 | %s", name)
+    logger.info("STAMP BUILD START v1.5.0 | %s", name)
 
     nominal, rw, rh = parse_size(base_size, base_shape)
 
@@ -433,7 +433,7 @@ def _build_scene(
 
     scene = trimesh.Scene()
     if layout_mode == "separate":
-        # v1.4.1:
+        # v1.5.0:
         # Objects are still separate in 3MF, but placed in the correct assembled position.
         # No more "letters flying away" in slicer.
         scene.add_geometry(base.copy(), geom_name=base_name, node_name=base_name)
@@ -464,12 +464,12 @@ def _build_scene(
     pp = str(output / f"{name}_preview.png")
     if preview_shape is not None and not preview_shape.is_empty:
         _preview_exact_geometry(pp, name, preview_shape, base_shape, nominal, rw, rh,
-                                note=f"Exact stroke {line_width:.2f} mm")
+                                note=f"{meta_extra.get('single_line_font_style', 'classic').upper()} · exact stroke {line_width:.2f} mm")
     else:
         preview(pp, name, "stamp", preview_mask, note=f"Fallback centerline {line_width:.2f} mm")
 
     meta = {
-        "version": "1.4.1",
+        "version": "1.5.0",
         "mode": "stamp",
         "base_shape": base_shape,
         "base_size": base_size,

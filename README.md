@@ -1,4 +1,14 @@
-# CakeStampBot v1.4.1 — Single-Line Geometry Fix
+# CakeStampBot v1.5.0 — Multi Single-Line Fonts
+
+Три реально разные single-line стилистики штампа:
+- Classic SL — основной сбалансированный вариант.
+- Comic SL — шире, мягче и наклоннее.
+- GOST SL — уже, выше и технически строже.
+
+Все три используют чистую single-line геометрию и exact stroke. Preview и 3MF используют одну геометрию.
+Fallback, топпер, две ножки со срезом, ZIP-off и layout сохранены.
+
+# CakeStampBot v1.5.0 — Single-Line Geometry Fix
 
 - Preview text stamp now renders the exact relief geometry used by 3MF.
 - True single-line geometry uses a clean exact buffer only; legacy cleanup is bypassed.
@@ -7,7 +17,7 @@
 - Unsupported symbols keep the safe fallback.
 - Topper, two separate beveled legs, ZIP-off and 3MF layout are unchanged.
 
-# CakeStampBot v1.4.1 — True Single-Line Text
+# CakeStampBot v1.5.0 — True Single-Line Text
 
 - Новый процедурный single-line core для кириллицы: буквы сразу строятся как траектории пера.
 - Для этого режима нет skeletonization, поэтому не должно быть ветвлений/утолщений на засечках.
@@ -16,7 +26,7 @@
 - Топпер, две ножки со срезом, имена 3MF, layout и ZIP-off не изменялись.
 - Файлы шрифтов в архив не добавлялись.
 
-# CakeStampBot v1.4.1 — Text Geometry Polish
+# CakeStampBot v1.5.0 — Text Geometry Polish
 
 Точечная правка только текстового штампа поверх v1.3.0:
 
@@ -30,7 +40,7 @@
 - топпер, две ножки, ZIP-off, имена 3MF и layout не менялись.
 
 
-# CakeStampBot v1.4.1 — Vector Text Core
+# CakeStampBot v1.5.0 — Vector Text Core
 
 Безопасное обновление поверх v1.2.7.
 
@@ -44,7 +54,7 @@
   Пример: `Королевы_рождаются_в_сентябре_stamp_SEPARATE.3mf`.
 
 
-# CakeStampBot v1.4.1 — Always Two Topper Legs
+# CakeStampBot v1.5.0 — Always Two Topper Legs
 
 Изменение топпера:
 
@@ -58,7 +68,7 @@
   - штамп layout fix сохранён;
   - сглаживание и точная толщина штампа сохранены.
 
-# CakeStampBot v1.4.1 — Stamp Separate Layout Fix
+# CakeStampBot v1.5.0 — Stamp Separate Layout Fix
 
 Исправления штампа:
 
@@ -71,7 +81,7 @@
   - точная толщина линии сохранена;
   - ножка топпера отдельная и со срезом.
 
-# CakeStampBot v1.4.1 — Beveled Topper Leg
+# CakeStampBot v1.5.0 — Beveled Topper Leg
 
 Изменение топпера:
 
@@ -81,7 +91,7 @@
 - ножку легче вставлять в торт;
 - ZIP по-прежнему отключён: бот отправляет только PNG и 3MF.
 
-# CakeStampBot v1.4.1 — No ZIP Export
+# CakeStampBot v1.5.0 — No ZIP Export
 
 Изменение:
 
@@ -93,7 +103,7 @@
 
 Это уменьшает мусор в Telegram и упрощает выдачу результата.
 
-# CakeStampBot v1.4.1 — More Smooth Stamp
+# CakeStampBot v1.5.0 — More Smooth Stamp
 
 Усилено сглаживание текстового штампа:
 
@@ -106,14 +116,14 @@
 
 Толщина линии должна остаться управляемой, а линии должны стать заметно плавнее.
 
-# CakeStampBot v1.4.1 — Fit Smooth Then Stroke
+# CakeStampBot v1.5.0 — Fit Smooth Then Stroke
 
 Исправление угловатых линий штампа:
 - порядок теперь: `mask → centerline → fit → smooth centerline → stroke exact width`
 - толщина линии остаётся точной;
 - центральная линия сглаживается перед построением stroke.
 
-# CakeStampBot v1.4.1 — Centerline Stamp Core
+# CakeStampBot v1.5.0 — Centerline Stamp Core
 
 Исправление текстового штампа:
 
@@ -123,7 +133,7 @@
 - полнотелые буквы убраны, двойная пустая обводка тоже убрана.
 
 
-# CakeStampBot v1.4.1 — Solid Vector Text Stamp
+# CakeStampBot v1.5.0 — Solid Vector Text Stamp
 
 Исправление текстового штампа:
 
@@ -134,7 +144,7 @@
 - режим картинки для штампа пока остаётся image centerline.
 
 
-# CakeStampBot v1.4.1 — Vector Stamp Core
+# CakeStampBot v1.5.0 — Vector Stamp Core
 
 Главное изменение этой версии:
 
@@ -145,9 +155,9 @@
 - режим картинки для штампа пока оставлен на raster centerline.
 
 
-# CakeStampBot v1.4.1 Fast Vector Core
+# CakeStampBot v1.5.0 Fast Vector Core
 
-Hotfix после v1.4.1:
+Hotfix после v1.5.0:
 
 - векторный топпер оставлен, но уменьшена чрезмерная детализация;
 - curve steps снижены до 20;
@@ -159,7 +169,7 @@ Hotfix после v1.4.1:
 Цель: сохранить плавные буквы, но вернуть генерацию к нормальному времени на Bothost.
 
 
-# CakeStampBot v1.4.1 Core Rewrite
+# CakeStampBot v1.5.0 Core Rewrite
 
 Это первая версия нового геометрического ядра.
 
@@ -252,5 +262,5 @@ python scripts/smoke_test.py
 Ожидаемый результат:
 
 ```text
-Smoke test PASS v1.4.1
+Smoke test PASS v1.5.0
 ```

@@ -67,7 +67,7 @@ def _connect_components(shape, bridge_width=2.0):
 
 def _force_two_line_bridges(base_shape, bridge_width=3.0):
     """
-    v1.4.1:
+    v1.5.0:
     Create two deliberate vertical bridge pads between two text lines.
 
     The old method sometimes found tiny accidental nearest links.
@@ -183,7 +183,7 @@ def _make_beveled_leg_mesh(name, width=3.0, length=45.0, height=2.8):
 
 def _make_leg_meshes(width_mm: float, legs: str, backing_bounds, backing_height: float, text_height: float):
     """
-    v1.4.1:
+    v1.5.0:
     Always create 2 separate beveled legs.
     The user can delete one in the slicer if needed.
     """
@@ -221,14 +221,14 @@ def build_topper_from_text(
     legs="auto",
 ):
     """
-    v1.4.1:
+    v1.5.0:
     - TextBase is one unified object: text-shaped backing + bridges.
     - Leg(s) are separate objects in 3MF so user can position them in slicer.
     - Reduced line spacing.
     - Two explicit bridges between lines for 2-line text.
     """
     logger.info(
-        "TOPPER BUILD START v1.4.1 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
+        "TOPPER BUILD START v1.5.0 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
         width_mm, font_choice, text_height, backing_height, legs
     )
 
@@ -310,7 +310,7 @@ def build_topper_from_text(
         "topper",
         "topper",
         mask,
-        note=f"Topper v1.4.1, TextBase + 2 separate beveled legs, spacing 0.82"
+        note=f"Topper v1.5.0, TextBase + 2 separate beveled legs, spacing 0.82"
     )
 
     meta = {
@@ -329,7 +329,7 @@ def build_topper_from_text(
         "leg_length_mm": LEG_LEN,
         "legs": 2,
         "objects": ["Topper_TextBase", "Topper_Text"] + [f"Topper_Leg_{i}" for i in range(1, leg_count+1)],
-        "note": "v1.4.1: unified textbase, separate beveled leg objects, two stronger explicit bridge pads between lines, tighter spacing.",
+        "note": "v1.5.0: unified textbase, separate beveled leg objects, two stronger explicit bridge pads between lines, tighter spacing.",
     }
 
     return export_bundle(

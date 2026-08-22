@@ -67,27 +67,51 @@ ADVANCE={"ж":1.18,"м":1.10,"ш":1.10,"щ":1.16,"ю":1.08,"и":.92,"н":.92,"п
 for _k,_v in list(ADVANCE.items()): ADVANCE[_k.upper()]=_v
 def _advance(ch): return .43 if ch.isspace() else ADVANCE.get(ch,.90)
 
-def text_to_single_lines(text,target_width_mm,target_height_mm,line_spacing=1.04,tracking=.075):
+def _style_glyph(g, style, glyph_index=0):
+    style=(style or "classic").lower()
+    if style=="comic":
+        g=affinity.skew(g,xs=10.0,ys=0.0,origin=(0,0))
+        g=affinity.scale(g,xfact=1.08,yfact=.94,origin=(0,0))
+        g=affinity.rotate(g,(-1.8 if glyph_index%2==0 else 1.2),origin="center")
+        return g
+    if style=="gost":
+        return affinity.scale(g,xfact=.82,yfact=1.08,origin=(0,0))
+    return g
+
+STYLE_METRICS={
+ "classic":{"tracking":.075,"line_spacing":1.04,"width_factor":.90},
+ "comic":{"tracking":.035,"line_spacing":1.00,"width_factor":.96},
+ "gost":{"tracking":.105,"line_spacing":1.07,"width_factor":.82},
+}
+
+def text_to_single_lines(text,target_width_mm,target_height_mm,line_spacing=None,tracking=None,font_choice="classic"):
+    style=(font_choice or "classic").lower()
+    if style not in STYLE_METRICS: style="classic"
+    m=STYLE_METRICS[style]
+    if line_spacing is None: line_spacing=m["line_spacing"]
+    if tracking is None: tracking=m["tracking"]
     lines=str(text or "").splitlines() or [""]
-    geoms=[]; y=0.0
+    geoms=[]; y=0.0; glyph_index=0
     for line in lines:
         widths=[_advance(c) for c in line]
+        if style=="comic": widths=[w*1.04 for w in widths]
+        elif style=="gost": widths=[w*.88 for w in widths]
         total=sum(widths)+tracking*max(0,len(widths)-1); x=-total/2.0
         for c,w in zip(line,widths):
             if not c.isspace():
                 g=_glyph(c)
                 if g is not None:
+                    g=_style_glyph(g,style,glyph_index)
                     x0,y0,x1,y1=g.bounds; gw=max(x1-x0,1e-6)
-                    gs=min(1.0,(w*.90)/gw)
+                    gs=min(1.0,(w*m["width_factor"])/gw)
                     g=affinity.scale(g,xfact=gs,yfact=1.0,origin=(0,0))
                     x0,y0,x1,y1=g.bounds
                     g=affinity.translate(g,xoff=x+(w-(x1-x0))/2-x0,yoff=-y)
-                    geoms.append(g)
+                    geoms.append(g); glyph_index+=1
             x+=w+tracking
         y+=1.18*line_spacing
     if not geoms: raise ValueError("No supported glyph geometry")
-    geom=unary_union(geoms)
-    x0,y0,x1,y1=geom.bounds
+    geom=unary_union(geoms); x0,y0,x1,y1=geom.bounds
     scale=min(target_width_mm/max(x1-x0,1e-6),target_height_mm/max(y1-y0,1e-6))
     geom=affinity.scale(geom,xfact=scale,yfact=scale,origin=(0,0))
     x0,y0,x1,y1=geom.bounds
