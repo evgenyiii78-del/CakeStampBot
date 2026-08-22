@@ -111,7 +111,40 @@ def _resample_linestring(line: LineString, step_mm: float = 0.10):
     return LineString([(p.x, p.y) for p in pts])
 
 
-def _cubic_smooth_linestring(line: LineString, smoothing_mm: float = 0.018):
+
+def _trim_line_ends(line: LineString, trim_mm: float = 0.055):
+    """Trim tiny unstable end fragments which become hooks after stroke buffering."""
+    if line is None or line.is_empty or line.length <= trim_mm * 2.5:
+        return line
+    start = float(trim_mm)
+    end = float(line.length - trim_mm)
+    count = max(4, int(np.ceil((end - start) / 0.075)) + 1)
+    ds = np.linspace(start, end, count)
+    pts = [line.interpolate(float(d)) for d in ds]
+    return LineString([(p.x, p.y) for p in pts])
+
+
+def _remove_tiny_centerline_parts(geom, min_length_mm: float = 0.32):
+    """Remove only genuinely tiny skeleton fragments; preserve glyph structure."""
+    if geom is None or geom.is_empty:
+        return geom
+    if isinstance(geom, LineString):
+        return geom if geom.length >= min_length_mm else GeometryCollection()
+    if isinstance(geom, MultiLineString):
+        parts = [g for g in geom.geoms if (not g.is_empty and g.length >= min_length_mm)]
+        return MultiLineString(parts) if parts else GeometryCollection()
+    if isinstance(geom, GeometryCollection):
+        parts = []
+        for g in geom.geoms:
+            if isinstance(g, LineString) and g.length >= min_length_mm:
+                parts.append(g)
+            elif isinstance(g, MultiLineString):
+                parts.extend(x for x in g.geoms if x.length >= min_length_mm)
+        return MultiLineString(parts) if parts else GeometryCollection()
+    return geom
+
+
+def _cubic_smooth_linestring(line: LineString, smoothing_mm: float = 0.026):
     """
     Smooth a centerline with a parametric cubic B-spline.
     This is isolated to TEXT stamps; image stamps keep the proven old pipeline.
@@ -120,7 +153,7 @@ def _cubic_smooth_linestring(line: LineString, smoothing_mm: float = 0.018):
     if line is None or line.is_empty or line.length < 0.45:
         return line
 
-    line = _resample_linestring(line, 0.11)
+    line = _resample_linestring(line, 0.085)
     coords = np.asarray(line.coords, dtype=float)
     if len(coords) < 4:
         return _smooth_line(line, refinements=5, simplify_mm=0.035)
@@ -138,11 +171,14 @@ def _cubic_smooth_linestring(line: LineString, smoothing_mm: float = 0.018):
         s = max(1e-7, (float(smoothing_mm) ** 2) * len(coords))
         k = min(3, len(coords) - 1)
         tck, _ = splprep([coords[:, 0], coords[:, 1]], s=s, k=k)
-        samples = max(12, int(np.ceil(line.length / 0.055)))
+        samples = max(16, int(np.ceil(line.length / 0.040)))
         u = np.linspace(0.0, 1.0, samples)
         x, y = splev(u, tck)
         out = LineString(np.column_stack([x, y]))
-        return out.simplify(0.004, preserve_topology=False)
+        out = out.simplify(0.002, preserve_topology=False)
+        if not out.is_ring:
+            out = _trim_line_ends(out, 0.045)
+        return out
     except Exception:
         logger.exception("Cubic centerline smoothing fallback")
         return _smooth_line(line, refinements=6, simplify_mm=0.040)
@@ -169,7 +205,7 @@ def _smooth_text_centerlines(geom):
 
 def _build_text_relief_v130(mask, px_per_mm, target_w, target_h, line_width):
     """
-    v1.3.0 text-only core:
+    v1.3.1 text-only core:
       high-res text mask -> medial centerline -> fit -> cubic spline -> exact-width stroke.
     The old text pipeline remains available as a fallback.
     """
@@ -178,7 +214,9 @@ def _build_text_relief_v130(mask, px_per_mm, target_w, target_h, line_width):
         raise RuntimeError("Не удалось построить centerline текста.")
 
     line_geom = _fit_line_geometry(line_geom, target_w, target_h, margin_mm=3.0)
+    line_geom = _remove_tiny_centerline_parts(line_geom, min_length_mm=0.32)
     line_geom = _smooth_text_centerlines(line_geom)
+    line_geom = _remove_tiny_centerline_parts(line_geom, min_length_mm=0.30)
     shape = _stroke_centerline(line_geom, line_width)
     if shape is None or shape.is_empty:
         raise RuntimeError("Не удалось построить векторный stroke текста.")
@@ -233,13 +271,13 @@ def build_stamp_from_text(
 
     mask = render_text_mask(text, 82, PX_TEXT, font_choice)
 
-    # v1.3.0 is intentionally isolated to text stamps.
+    # v1.3.1 is intentionally isolated to text stamps.
     # If the new cubic centerline core fails for a rare glyph/font, keep the bot working.
     try:
         relief_shape = _build_text_relief_v130(mask, PX_TEXT, target_w, target_h, line_width)
-        geometry_core = "text_highres_centerline_cubic_spline_exact_stroke"
+        geometry_core = "text_highres_pruned_cubic_spline_polished_stroke"
     except Exception:
-        logger.exception("v1.3.0 text core failed; using proven v1.2.x fallback")
+        logger.exception("v1.3.1 text core failed; using proven v1.2.x fallback")
         relief_shape = _build_relief_from_mask(mask, PX_TEXT, target_w, target_h, line_width)
         geometry_core = "text_v1_2_fallback"
 
@@ -257,7 +295,7 @@ def build_stamp_from_text(
         preview_mask=mask,
         meta_extra={
             "geometry_core": geometry_core,
-            "stamp_text_mode": "highres_centerline_cubic_spline_exact_stroke",
+            "stamp_text_mode": "highres_pruned_cubic_spline_polished_stroke",
             "px_per_mm": PX_TEXT,
         },
     )
@@ -309,7 +347,7 @@ def _build_scene(
     preview_mask,
     meta_extra=None,
 ):
-    logger.info("STAMP BUILD START v1.3.0 | %s", name)
+    logger.info("STAMP BUILD START v1.3.1 | %s", name)
 
     nominal, rw, rh = parse_size(base_size, base_shape)
 
@@ -340,7 +378,7 @@ def _build_scene(
 
     scene = trimesh.Scene()
     if layout_mode == "separate":
-        # v1.3.0:
+        # v1.3.1:
         # Objects are still separate in 3MF, but placed in the correct assembled position.
         # No more "letters flying away" in slicer.
         scene.add_geometry(base.copy(), geom_name=base_name, node_name=base_name)
@@ -369,10 +407,10 @@ def _build_scene(
         suffix = "stamp_ASSEMBLED"
 
     pp = str(output / f"{name}_preview.png")
-    preview(pp, name, "stamp", preview_mask, note=f"HighRes→CubicSpline→ExactStroke {line_width:.2f} mm")
+    preview(pp, name, "stamp", preview_mask, note=f"HighRes→Prune→CubicPolish→ExactStroke {line_width:.2f} mm")
 
     meta = {
-        "version": "1.3.0",
+        "version": "1.3.1",
         "mode": "stamp",
         "base_shape": base_shape,
         "base_size": base_size,
