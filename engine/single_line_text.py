@@ -68,7 +68,7 @@ for _k,_v in list(ADVANCE.items()): ADVANCE[_k.upper()]=_v
 def _advance(ch): return .43 if ch.isspace() else ADVANCE.get(ch,.90)
 
 
-# v1.5.1 Native Stroke Glyphs
+# v1.6.0 Native Stroke Glyphs
 # Each style can supply its own centerline glyph instead of transforming Classic.
 def _arc(cx,cy,rx,ry,a0,a1,n=28):
     pts=[]
