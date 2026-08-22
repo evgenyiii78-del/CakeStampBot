@@ -1,3 +1,4 @@
+# TOPPER-ONLY VECTOR TEXT: independent from stamp TTF engine.
 
 import logging
 from dataclasses import dataclass

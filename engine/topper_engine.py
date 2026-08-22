@@ -2,6 +2,7 @@
 from pathlib import Path
 import logging
 import trimesh
+from PIL import Image, ImageDraw
 
 from shapely.geometry import LineString, box
 from shapely.ops import unary_union, nearest_points
@@ -9,7 +10,7 @@ from shapely.ops import unary_union, nearest_points
 from .common import *
 from .vector_text import text_to_shape
 
-logger = logging.getLogger("CakeStampEngine.TopperV1_0_2")
+logger = logging.getLogger("CakeStampEngine.Topper")
 
 DEFAULT_TEXT_HEIGHT = 2.8
 DEFAULT_BACKING_HEIGHT = 1.3
@@ -25,6 +26,66 @@ def _as_polys(shape):
     if shape.geom_type == "Polygon":
         return [shape]
     return [g for g in getattr(shape, "geoms", []) if not g.is_empty and g.area > 0.01]
+
+
+
+def _draw_shape(draw, shape, bounds, rect, fill):
+    """Render a Shapely polygon/multipolygon into a PIL preview."""
+    if shape is None or shape.is_empty:
+        return
+    minx, miny, maxx, maxy = bounds
+    rx0, ry0, rx1, ry1 = rect
+    sx = (rx1-rx0) / max(maxx-minx, 1e-6)
+    sy = (ry1-ry0) / max(maxy-miny, 1e-6)
+    scale = min(sx, sy)
+    cx = (minx+maxx)/2.0
+    cy = (miny+maxy)/2.0
+    px = (rx0+rx1)/2.0
+    py = (ry0+ry1)/2.0
+
+    def xy(x,y):
+        return (px + (x-cx)*scale, py - (y-cy)*scale)
+
+    polys = _as_polys(shape)
+    for poly in polys:
+        draw.polygon([xy(x,y) for x,y in poly.exterior.coords], fill=fill)
+        for ring in poly.interiors:
+            draw.polygon([xy(x,y) for x,y in ring.coords], fill=(246,243,235))
+
+
+def _topper_preview(path, text_shape, backing_shape, note=""):
+    """
+    v1.6.1: preview is owned by topper_engine.
+    It renders the actual text/backing geometry and shows TWO 3 mm beveled legs.
+    No stamp/common preview logic is involved.
+    """
+    img = Image.new("RGB", (1000,1000), (246,243,235))
+    d = ImageDraw.Draw(img)
+
+    b = backing_shape.bounds
+    _draw_shape(d, backing_shape, b, (90,130,910,480), (185,185,180))
+    _draw_shape(d, text_shape, b, (90,130,910,480), (55,92,205))
+
+    # Representative assembled preview only. In 3MF the legs remain separate objects.
+    minx,miny,maxx,maxy = b
+    w = maxx-minx
+    leg_xs = [500 - min(180, w*2.0), 500 + min(180, w*2.0)]
+    top_y = 475
+    leg_w_px = 24
+    leg_len_px = 310
+    bevel_px = 55
+    for x in leg_xs:
+        pts = [
+            (x-leg_w_px//2, top_y),
+            (x+leg_w_px//2, top_y),
+            (x+leg_w_px//2, top_y+leg_len_px-bevel_px),
+            (x-leg_w_px//2, top_y+leg_len_px),
+        ]
+        d.polygon(pts, fill=(185,185,180))
+
+    d.text((80,55), "CakeStampBot v1.6.1 — TOPPER", fill=(30,30,30))
+    d.text((80,910), note or "Topper: actual backing + 2 separate beveled legs", fill=(30,30,30))
+    img.save(path)
 
 
 def _connect_components(shape, bridge_width=2.0):
@@ -67,7 +128,7 @@ def _connect_components(shape, bridge_width=2.0):
 
 def _force_two_line_bridges(base_shape, bridge_width=3.0):
     """
-    v1.6.0:
+    v1.6.1:
     Create two deliberate vertical bridge pads between two text lines.
 
     The old method sometimes found tiny accidental nearest links.
@@ -183,7 +244,7 @@ def _make_beveled_leg_mesh(name, width=3.0, length=45.0, height=2.8):
 
 def _make_leg_meshes(width_mm: float, legs: str, backing_bounds, backing_height: float, text_height: float):
     """
-    v1.6.0:
+    v1.6.1:
     Always create 2 separate beveled legs.
     The user can delete one in the slicer if needed.
     """
@@ -221,14 +282,14 @@ def build_topper_from_text(
     legs="auto",
 ):
     """
-    v1.6.0:
+    v1.6.1:
     - TextBase is one unified object: text-shaped backing + bridges.
     - Leg(s) are separate objects in 3MF so user can position them in slicer.
     - Reduced line spacing.
     - Two explicit bridges between lines for 2-line text.
     """
     logger.info(
-        "TOPPER BUILD START v1.6.0 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
+        "TOPPER BUILD START v1.6.1 | width=%s font=%s text_h=%s backing_h=%s legs=%s",
         width_mm, font_choice, text_height, backing_height, legs
     )
 
@@ -302,19 +363,17 @@ def build_topper_from_text(
         exported_stls.append(leg_stl)
         scene.add_geometry(shifted, geom_name=f"Topper_Leg_{i}", node_name=f"Topper_Leg_{i}")
 
-    # Preview for telegram only.
-    mask = render_text_mask(text, 100, 32, font_choice)
+    # Topper-owned preview: actual backing/text geometry + both legs.
     preview_path = str(output / "topper_preview.png")
-    preview(
+    _topper_preview(
         preview_path,
-        "topper",
-        "topper",
-        mask,
-        note=f"Topper v1.6.0, TextBase + 2 separate beveled legs, spacing 0.82"
+        text_shape=text_shape,
+        backing_shape=backing_shape,
+        note="Topper v1.6.1 · actual TextBase · 2 separate beveled 3 mm legs",
     )
 
     meta = {
-        "version": "1.0.3",
+        "version": "1.6.1",
         "mode": "topper",
         "geometry_core": "vector_text_ttf_outlines",
         "font_path": vec.font_path,
@@ -329,7 +388,7 @@ def build_topper_from_text(
         "leg_length_mm": LEG_LEN,
         "legs": 2,
         "objects": ["Topper_TextBase", "Topper_Text"] + [f"Topper_Leg_{i}" for i in range(1, leg_count+1)],
-        "note": "v1.6.0: unified textbase, separate beveled leg objects, two stronger explicit bridge pads between lines, tighter spacing.",
+        "note": "v1.6.1: isolated topper engine; actual-geometry preview; two separate beveled 3 mm legs; tighter spacing.",
     }
 
     return export_bundle(

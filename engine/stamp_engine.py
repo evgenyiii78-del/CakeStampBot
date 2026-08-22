@@ -205,7 +205,7 @@ def _smooth_text_centerlines(geom):
 
 def _build_text_relief_v130(mask, px_per_mm, target_w, target_h, line_width):
     """
-    v1.6.0 text-only core:
+    v1.6.1 text-only core:
       high-res text mask -> medial centerline -> fit -> cubic spline -> exact-width stroke.
     The old text pipeline remains available as a fallback.
     """
@@ -278,7 +278,7 @@ def build_stamp_from_text(
 
     mask = render_text_mask(text, 82, PX_TEXT, font_choice)
 
-    # v1.6.0 True Single-Line Text.
+    # v1.6.1 True Single-Line Text.
     # Supported Cyrillic is generated directly as pen trajectories:
     # no raster -> skeleton -> branch artifacts.
     active_font_path = None
@@ -296,7 +296,7 @@ def build_stamp_from_text(
         geometry_core = "real_ttf_vector_outline"
         active_font_path = ttf_text.font_path
     except Exception:
-        logger.info("v1.6.0 single-line fallback to v1.3 core", exc_info=True)
+        logger.info("v1.6.1 single-line fallback to v1.3 core", exc_info=True)
         try:
             relief_shape = _build_text_relief_v130(mask, PX_TEXT, target_w, target_h, line_width)
             geometry_core = "text_v1_3_fallback"
@@ -387,7 +387,7 @@ def _preview_exact_geometry(path, name, relief_shape, base_shape, nominal, rw, r
         for ring in poly.interiors:
             hole=[xy(x,y) for x,y in ring.coords]
             d.polygon(hole,fill=(232,195,121))
-    d.text((25,20),f"CakeStampBot v1.6.0 STAMP — exact 3MF geometry",fill=(45,45,45))
+    d.text((25,20),f"CakeStampBot v1.6.1 STAMP — exact 3MF geometry",fill=(45,45,45))
     if note:d.text((25,H-35),note,fill=(70,70,70))
     img.save(path)
 
@@ -405,7 +405,7 @@ def _build_scene(
     meta_extra=None,
     preview_shape=None,
 ):
-    logger.info("STAMP BUILD START v1.6.0 | %s", name)
+    logger.info("STAMP BUILD START v1.6.1 | %s", name)
 
     nominal, rw, rh = parse_size(base_size, base_shape)
 
@@ -436,7 +436,7 @@ def _build_scene(
 
     scene = trimesh.Scene()
     if layout_mode == "separate":
-        # v1.6.0:
+        # v1.6.1:
         # Objects are still separate in 3MF, but placed in the correct assembled position.
         # No more "letters flying away" in slicer.
         scene.add_geometry(base.copy(), geom_name=base_name, node_name=base_name)
@@ -487,3 +487,4 @@ def _build_scene(
 
     return export_bundle(output, name, scene, pp, stls, meta, suffix)
 from .ttf_vector_engine import text_to_ttf_geometry
+# STAMP-ONLY ENGINE: topper_engine must never import this module.
