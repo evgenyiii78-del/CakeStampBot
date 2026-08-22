@@ -67,6 +67,107 @@ ADVANCE={"ж":1.18,"м":1.10,"ш":1.10,"щ":1.16,"ю":1.08,"и":.92,"н":.92,"п
 for _k,_v in list(ADVANCE.items()): ADVANCE[_k.upper()]=_v
 def _advance(ch): return .43 if ch.isspace() else ADVANCE.get(ch,.90)
 
+
+# v1.5.1 Native Stroke Glyphs
+# Each style can supply its own centerline glyph instead of transforming Classic.
+def _arc(cx,cy,rx,ry,a0,a1,n=28):
+    pts=[]
+    for i in range(n+1):
+        a=math.radians(a0+(a1-a0)*i/n)
+        pts.append((cx+rx*math.cos(a),cy+ry*math.sin(a)))
+    return LineString(pts)
+
+def _ls(points):
+    return LineString(points)
+
+def _u(*parts):
+    return unary_union(parts)
+
+def _classic_native(ch):
+    # Smooth native curves for the most visible Cyrillic forms.
+    if ch in ("о","О"):
+        return _arc(.46,.46,.36,.36,0,360,40)
+    if ch in ("с","С"):
+        return _arc(.48,.46,.36,.36,48,312,34)
+    if ch in ("е","Е"):
+        return _u(_arc(.48,.46,.36,.36,42,318,34), _ls([(.18,.46),(.66,.46)]))
+    if ch in ("р","Р"):
+        return _u(_ls([(.20,.08),(.20,.82)]), _arc(.40,.62,.22,.20,-90,90,24),
+                  _ls([(.40,.82),(.20,.82)]), _ls([(.40,.42),(.20,.42)]))
+    if ch in ("в","В"):
+        return _u(_ls([(.18,.08),(.18,.84)]),
+                  _arc(.35,.65,.20,.19,-90,90,22),
+                  _arc(.36,.28,.22,.20,-90,90,22))
+    if ch in ("б","Б"):
+        return _u(_ls([(.22,.10),(.22,.72),(.65,.84)]),
+                  _arc(.43,.30,.23,.22,0,360,30))
+    if ch in ("ю","Ю"):
+        return _u(_ls([(.12,.08),(.12,.84)]),_ls([(.12,.46),(.34,.46)]),
+                  _arc(.60,.46,.25,.34,0,360,36))
+    if ch in ("я","Я"):
+        return _u(_arc(.43,.63,.23,.20,90,270,22),_ls([(.43,.43),(.67,.43)]),
+                  _ls([(.67,.08),(.67,.84)]),_ls([(.43,.43),(.16,.08)]))
+    return None
+
+def _comic_native(ch):
+    # Rounder, handwritten single-stroke forms.
+    if ch in ("о","О"):
+        return _arc(.46,.46,.37,.34,6,366,42)
+    if ch in ("с","С"):
+        return _arc(.48,.46,.37,.34,42,320,36)
+    if ch in ("е","Е"):
+        return _u(_arc(.48,.46,.37,.34,38,322,36),_ls([(.16,.45),(.67,.47)]))
+    if ch in ("р","Р"):
+        return _u(_ls([(.18,.02),(.23,.82)]),_arc(.43,.62,.23,.20,-100,92,26))
+    if ch in ("в","В"):
+        return _u(_ls([(.18,.08),(.23,.84)]),
+                  _arc(.38,.65,.21,.18,-100,92,24),
+                  _arc(.39,.29,.23,.20,-100,92,24))
+    if ch in ("б","Б"):
+        return _u(_ls([(.22,.10),(.25,.70),(.67,.86)]),
+                  _arc(.44,.30,.24,.22,2,362,32))
+    if ch in ("ю","Ю"):
+        return _u(_ls([(.13,.08),(.18,.84)]),_ls([(.16,.46),(.34,.46)]),
+                  _arc(.61,.46,.26,.33,4,364,38))
+    if ch in ("я","Я"):
+        return _u(_arc(.43,.63,.24,.20,86,274,24),_ls([(.43,.43),(.68,.43)]),
+                  _ls([(.68,.08),(.68,.84)]),_ls([(.43,.43),(.13,.08)]))
+    return None
+
+def _gost_native(ch):
+    # Upright technical single-line forms with controlled roundings.
+    if ch in ("о","О"):
+        return _arc(.46,.46,.30,.36,0,360,36)
+    if ch in ("с","С"):
+        return _arc(.47,.46,.30,.36,42,318,32)
+    if ch in ("е","Е"):
+        return _u(_arc(.47,.46,.30,.36,42,318,32),_ls([(.18,.46),(.62,.46)]))
+    if ch in ("р","Р"):
+        return _u(_ls([(.20,.08),(.20,.84)]),_arc(.37,.65,.18,.19,-90,90,22))
+    if ch in ("в","В"):
+        return _u(_ls([(.19,.08),(.19,.84)]),
+                  _arc(.34,.66,.16,.18,-90,90,20),
+                  _arc(.34,.29,.16,.19,-90,90,20))
+    if ch in ("б","Б"):
+        return _u(_ls([(.20,.08),(.20,.78),(.57,.78)]),
+                  _arc(.37,.28,.18,.20,0,360,26))
+    if ch in ("ю","Ю"):
+        return _u(_ls([(.15,.08),(.15,.84)]),_ls([(.15,.46),(.32,.46)]),
+                  _arc(.54,.46,.20,.34,0,360,32))
+    if ch in ("я","Я"):
+        return _u(_arc(.38,.65,.18,.19,90,270,20),_ls([(.38,.46),(.57,.46)]),
+                  _ls([(.57,.08),(.57,.84)]),_ls([(.38,.46),(.14,.08)]))
+    return None
+
+def _native_glyph(ch, style):
+    if style=="comic":
+        g=_comic_native(ch)
+    elif style=="gost":
+        g=_gost_native(ch)
+    else:
+        g=_classic_native(ch)
+    return g if g is not None else _glyph(ch)
+
 def _style_glyph(g, style, glyph_index=0):
     style=(style or "classic").lower()
     if style=="comic":
@@ -99,9 +200,8 @@ def text_to_single_lines(text,target_width_mm,target_height_mm,line_spacing=None
         total=sum(widths)+tracking*max(0,len(widths)-1); x=-total/2.0
         for c,w in zip(line,widths):
             if not c.isspace():
-                g=_glyph(c)
+                g=_native_glyph(c,style)
                 if g is not None:
-                    g=_style_glyph(g,style,glyph_index)
                     x0,y0,x1,y1=g.bounds; gw=max(x1-x0,1e-6)
                     gs=min(1.0,(w*m["width_factor"])/gw)
                     g=affinity.scale(g,xfact=gs,yfact=1.0,origin=(0,0))
