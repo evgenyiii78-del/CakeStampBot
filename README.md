@@ -1,3 +1,7 @@
+# CakeStampBot v1.6.4 — Stamp Artifact Cleanup
+
+Точечная правка только STAMP: удаление коротких паразитных terminal-spur ветвей centerline до формирования stroke. Толщина 0.35 мм, TTF-форма, масштаб и межстрочный интервал сохранены. Topper не изменён.
+
 # CakeStampBot v1.6.3 — Stamp Font Summary
 
 Небольшая UI-правка поверх v1.6.2:
