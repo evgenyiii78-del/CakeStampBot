@@ -17,7 +17,7 @@ logger = logging.getLogger("CakeStampEngine.StampV1_3_0")
 PX_TEXT = 120
 PX_IMAGE = 36
 RELIEF_H = 6.5
-BASE_H = 0.7
+BASE_H = 0.6
 
 
 def _fit_targets(base_size, base_shape):
