@@ -233,7 +233,7 @@ def stamp_summary_text(context: ContextTypes.DEFAULT_TYPE) -> str:
         f"• размер: {str(context.user_data.get('base_size', '105')).replace('x', '×')} мм\n"
         f"• форма: {'круглая' if context.user_data.get('base_shape') == 'round' else 'прямоугольная'}\n"
         f"• шрифт: {stamp_font_name(context)}\n"
-        f"• линия: {context.user_data.get('line_width', 0.45)} мм\n"
+        f"• линия: {context.user_data.get('line_width', 0.25)} мм\n"
         f"• сердце: {'да' if context.user_data.get('add_heart') else 'нет'}\n"
         f"• раскладка: {'собрать' if context.user_data.get('layout_mode') == 'assembled' else 'отдельно'}"
     )
@@ -267,7 +267,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_update(update, "COMMAND /start")
     context.user_data.clear()
     await update.message.reply_text(
-        "CakeStampBot v1.6.6",
+        "CakeStampBot v1.6.7",
         reply_markup=main_menu_keyboard(),
     )
     await update.message.reply_text("Выбери режим:", reply_markup=mode_inline_keyboard())
@@ -276,7 +276,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_update(update, "COMMAND /help")
     await update.message.reply_text(
-        "Помощь CakeStampBot v1.6.6\n\n"
+        "Помощь CakeStampBot v1.6.7\n\n"
         "🍰 Штамп: текст или картинка → PNG + 3MF; имя 3MF берётся из текста.\n"
         "🎂 Топпер: текст → единая модель с подложкой под буквами и ножками.\n\n"
         "Вырубка удалена из проекта.",
@@ -427,16 +427,18 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 await query.edit_message_text("Выбери размер прямоугольной подложки:", reply_markup=rect_size_keyboard())
             else:
                 context.user_data["base_size"] = context.user_data.get("stamp_size", "105")
-                await query.edit_message_text("Выбери толщину линии:", reply_markup=stamp_width_keyboard())
+                context.user_data["line_width"] = 0.25
+                await query.edit_message_text("Добавить сердечко?", reply_markup=heart_keyboard())
             return
 
         if data.startswith("rect_size:"):
             context.user_data["base_size"] = data.split(":", 1)[1]
-            await query.edit_message_text("Выбери толщину линии:", reply_markup=stamp_width_keyboard())
+            context.user_data["line_width"] = 0.25
+            await query.edit_message_text("Добавить сердечко?", reply_markup=heart_keyboard())
             return
 
         if data.startswith("stamp_width:"):
-            context.user_data["line_width"] = float(data.split(":", 1)[1])
+            context.user_data["line_width"] = 0.25
             await query.edit_message_text("Добавить сердечко?", reply_markup=heart_keyboard())
             return
 
@@ -561,7 +563,7 @@ def build_model(params: dict[str, Any]):
             output_dir=str(out_dir),
             base_size=params.get("base_size", "105"),
             base_shape=params.get("base_shape", "round"),
-            line_width=float(params.get("line_width", 0.45)),
+            line_width=0.25,
             add_heart=bool(params.get("add_heart", False)),
             layout_mode=params.get("layout_mode", "assembled"),
         )
@@ -574,7 +576,7 @@ def build_model(params: dict[str, Any]):
         output_dir=str(out_dir),
         base_size=params.get("base_size", "105"),
         base_shape=params.get("base_shape", "round"),
-        line_width=float(params.get("line_width", 0.45)),
+        line_width=0.25,
         font_choice=params.get("font_choice", "classic"),
         add_heart=bool(params.get("add_heart", False)),
         layout_mode=params.get("layout_mode", "assembled"),
@@ -663,8 +665,8 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_error_handler(error_handler)
 
-    logger.info("CakeStampBot v1.6.6 started")
-    print("CakeStampBot v1.6.6 started")
+    logger.info("CakeStampBot v1.6.7 started")
+    print("CakeStampBot v1.6.7 started")
     app.run_polling()
 
 
