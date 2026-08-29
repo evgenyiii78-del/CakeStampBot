@@ -372,6 +372,22 @@ def _ttf_outline_to_exact_centerline_stroke(outline_shape, line_width, raster_px
 
 
 
+def _warp_shape_to_circle(shape, base_diameter_mm, mode):
+    if shape is None or shape.is_empty: return shape
+    minx,miny,maxx,maxy=shape.bounds
+    width=max(maxx-minx,1e-6); radius=max(10.0,float(base_diameter_mm)*0.39)
+    span=math.radians(330.0) if mode=="full" else min(math.radians(160.0),max(math.radians(80.0),width/radius))
+    cx=(minx+maxx)/2.0; cy=(miny+maxy)/2.0
+    from shapely.ops import transform
+    def fn(x,y,z=None):
+        xx=np.asarray(x,dtype=float); yy=np.asarray(y,dtype=float); t=(xx-cx)/width
+        if mode=="bottom": a=-math.pi/2.0+t*span; rr=radius-(yy-cy)
+        else: a=math.pi/2.0-t*span; rr=radius+(yy-cy)
+        X=rr*np.cos(a); Y=rr*np.sin(a)
+        return (X,Y) if z is None else (X,Y,z)
+    return transform(fn,shape).buffer(0)
+
+
 def build_stamp_from_text(
     text,
     output_dir,
@@ -379,6 +395,7 @@ def build_stamp_from_text(
     base_shape="round",
     line_width=0.45,
     font_choice="classic",
+    text_path="normal",
     add_heart=False,
     layout_mode="assembled",
 ):
@@ -423,6 +440,12 @@ def build_stamp_from_text(
             relief_shape = _build_relief_from_mask(mask, PX_TEXT, target_w, target_h, line_width)
             geometry_core = "text_v1_2_fallback"
 
+    text_path=str(text_path or "normal").lower()
+    if base_shape != "round": text_path="normal"
+    if text_path in {"top","bottom","full"}:
+        relief_shape=_warp_shape_to_circle(relief_shape, nominal, text_path)
+        geometry_core=geometry_core+"_circular_"+text_path
+
     safe_name = _safe_text_filename(text)
 
     return _build_scene(
@@ -444,6 +467,7 @@ def build_stamp_from_text(
             "ttf_line_spacing": 0.90,
             "requested_stroke_width_mm": float(line_width),
             "stroke_width_mode": "exact_centerline_buffer",
+            "text_path": text_path,
             "px_per_mm": PX_TEXT,
         },
     )

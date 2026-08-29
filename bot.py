@@ -125,6 +125,13 @@ def stamp_width_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def stamp_text_path_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➡️ Обычный", callback_data="stamp_text_path:normal")],
+        [InlineKeyboardButton("⌒ Сверху", callback_data="stamp_text_path:top"), InlineKeyboardButton("⌣ Снизу", callback_data="stamp_text_path:bottom")],
+        [InlineKeyboardButton("⭕ По всей окружности", callback_data="stamp_text_path:full")],
+    ])
+
 def heart_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
@@ -267,7 +274,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_update(update, "COMMAND /start")
     context.user_data.clear()
     await update.message.reply_text(
-        "CakeStampBot v1.6.7",
+        "CakeStampBot v1.7.0",
         reply_markup=main_menu_keyboard(),
     )
     await update.message.reply_text("Выбери режим:", reply_markup=mode_inline_keyboard())
@@ -276,7 +283,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_update(update, "COMMAND /help")
     await update.message.reply_text(
-        "Помощь CakeStampBot v1.6.7\n\n"
+        "Помощь CakeStampBot v1.7.0\n\n"
         "🍰 Штамп: текст или картинка → PNG + 3MF; имя 3MF берётся из текста.\n"
         "🎂 Топпер: текст → единая модель с подложкой под буквами и ножками.\n\n"
         "Вырубка удалена из проекта.",
@@ -428,12 +435,22 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             else:
                 context.user_data["base_size"] = context.user_data.get("stamp_size", "105")
                 context.user_data["line_width"] = 0.25
-                await query.edit_message_text("Добавить сердечко?", reply_markup=heart_keyboard())
+                if context.user_data.get("source") == "text":
+                    await query.edit_message_text("Как расположить текст?", reply_markup=stamp_text_path_keyboard())
+                else:
+                    context.user_data["text_path"] = "normal"
+                    await query.edit_message_text("Добавить сердечко?", reply_markup=heart_keyboard())
             return
 
         if data.startswith("rect_size:"):
             context.user_data["base_size"] = data.split(":", 1)[1]
             context.user_data["line_width"] = 0.25
+            await query.edit_message_text("Добавить сердечко?", reply_markup=heart_keyboard())
+            return
+
+        if data.startswith("stamp_text_path:"):
+            value=data.split(":",1)[1]
+            context.user_data["text_path"] = value if value in {"normal","top","bottom","full"} else "normal"
             await query.edit_message_text("Добавить сердечко?", reply_markup=heart_keyboard())
             return
 
@@ -578,6 +595,7 @@ def build_model(params: dict[str, Any]):
         base_shape=params.get("base_shape", "round"),
         line_width=0.25,
         font_choice=params.get("font_choice", "classic"),
+        text_path=params.get("text_path", "normal"),
         add_heart=bool(params.get("add_heart", False)),
         layout_mode=params.get("layout_mode", "assembled"),
     )
@@ -665,8 +683,8 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_error_handler(error_handler)
 
-    logger.info("CakeStampBot v1.6.7 started")
-    print("CakeStampBot v1.6.7 started")
+    logger.info("CakeStampBot v1.7.0 started")
+    print("CakeStampBot v1.7.0 started")
     app.run_polling()
 
 
