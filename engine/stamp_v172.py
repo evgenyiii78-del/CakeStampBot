@@ -1,11 +1,24 @@
-"""CakeStampBot v1.7.2 stamp-only compatibility wrapper.
+"""CakeStampBot v1.8.1 stamp-only compatibility wrapper.
 
-Adds physical text height control and makes PNG preview use the exact final
-relief geometry. Topper code is intentionally untouched.
+Physical text height is enforced on the final stamp geometry, so 5 mm and
+10 mm are visibly and measurably different. Circular radius remains controlled
+by stamp_engine; topper code is intentionally untouched.
 """
 from __future__ import annotations
 
+from shapely import affinity
 from . import stamp_engine as _se
+
+
+def _force_final_height(shape, target_mm: float):
+    """Scale final 2D text geometry to an exact physical Y height."""
+    if shape is None or shape.is_empty:
+        return shape
+    minx, miny, maxx, maxy = shape.bounds
+    h = max(maxy - miny, 1e-9)
+    factor = float(target_mm) / h
+    # Uniform scale preserves the glyph proportions and the selected font.
+    return affinity.scale(shape, xfact=factor, yfact=factor, origin=(0.0, 0.0))
 
 
 def build_stamp_from_text(*, text, output_dir, base_size="105", base_shape="round",
@@ -13,25 +26,40 @@ def build_stamp_from_text(*, text, output_dir, base_size="105", base_shape="roun
                           text_size_mm=7.0, add_heart=False, layout_mode="assembled"):
     size = max(5.0, min(10.0, float(text_size_mm)))
     original_ttf = _se.text_to_ttf_geometry
+    original_warp = _se._warp_shape_to_circle
     original_scene = _se._build_scene
 
     def sized_ttf(*args, **kwargs):
-        # Height is a physical millimetre target. Width remains constrained by
-        # the stamp so long strings still fit safely inside the base.
+        # Request the selected physical height before centerline conversion.
         kwargs["target_height_mm"] = size
         return original_ttf(*args, **kwargs)
 
+    def sized_warp(shape, base_diameter_mm, mode):
+        # First enforce the selected physical height on straight geometry,
+        # then bend it. Radius still depends only on the stamp diameter.
+        return original_warp(_force_final_height(shape, size), base_diameter_mm, mode)
+
     def exact_preview_scene(*args, **kwargs):
-        # The relief_shape here is exactly the 2D geometry later extruded into
-        # the 3MF. Always render it for text stamps, including circular modes.
-        if "relief_shape" in kwargs:
-            kwargs["preview_shape"] = kwargs["relief_shape"]
+        # For normal text there is no circular warp, so enforce height here.
+        # For circular modes sized_warp already did it before bending.
+        meta = kwargs.get("meta_extra") or {}
+        path = str(meta.get("text_path", text_path or "normal")).lower()
+        relief = kwargs.get("relief_shape")
+        if relief is not None and path == "normal":
+            relief = _force_final_height(relief, size)
+            kwargs["relief_shape"] = relief
+        if relief is not None:
+            kwargs["preview_shape"] = relief
+        meta["requested_text_height_mm"] = size
+        meta["text_height_mode"] = "exact_final_geometry"
+        kwargs["meta_extra"] = meta
         return original_scene(*args, **kwargs)
 
     _se.text_to_ttf_geometry = sized_ttf
+    _se._warp_shape_to_circle = sized_warp
     _se._build_scene = exact_preview_scene
     try:
-        result = _se.build_stamp_from_text(
+        return _se.build_stamp_from_text(
             text=text,
             output_dir=output_dir,
             base_size=base_size,
@@ -42,7 +70,7 @@ def build_stamp_from_text(*, text, output_dir, base_size="105", base_shape="roun
             add_heart=add_heart,
             layout_mode=layout_mode,
         )
-        return result
     finally:
         _se.text_to_ttf_geometry = original_ttf
+        _se._warp_shape_to_circle = original_warp
         _se._build_scene = original_scene
