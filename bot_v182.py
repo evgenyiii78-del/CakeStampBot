@@ -1,5 +1,5 @@
-"""CakeStampBot v1.8.3 Compact UI.
-Stamp text height: 10-16 mm. Topper geometry is untouched.
+"""CakeStampBot v1.8.5 Compact UI.
+Stamp text height: 10-16 mm. Exact 0.25 mm centerline stroke. Topper untouched.
 """
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import bot_legacy as legacy
@@ -49,10 +49,10 @@ async def compact_callback(update,context):
     return await _original_callback(update,context)
 legacy.on_callback=compact_callback
 
-async def start_v183(update,context):
-    context.user_data.clear(); await update.message.reply_text("CakeStampBot v1.8.3",reply_markup=legacy.main_menu_keyboard()); await update.message.reply_text("Выбери режим:",reply_markup=legacy.mode_inline_keyboard())
-async def help_v183(update,context):
-    await update.message.reply_text("Помощь CakeStampBot v1.8.3\n\n🍰 Штамп: компактные настройки, высота текста 10–16 мм.\n🎂 Топпер: без изменений.",reply_markup=legacy.main_menu_keyboard())
-legacy.start=start_v183; legacy.help_cmd=help_v183
+async def start_v185(update,context):
+    context.user_data.clear(); await update.message.reply_text("CakeStampBot v1.8.5",reply_markup=legacy.main_menu_keyboard()); await update.message.reply_text("Выбери режим:",reply_markup=legacy.mode_inline_keyboard())
+async def help_v185(update,context):
+    await update.message.reply_text("Помощь CakeStampBot v1.8.5\n\n🍰 Штамп: компактные настройки, высота текста 10–16 мм, линия 0.25 мм.\n🎂 Топпер: без изменений.",reply_markup=legacy.main_menu_keyboard())
+legacy.start=start_v185; legacy.help_cmd=help_v185
 
 if __name__=="__main__": legacy.main()
