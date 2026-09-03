@@ -22,7 +22,6 @@ def _ids_from_env(name):
     return out
 
 ADMIN_IDS = _ids_from_env("ADMIN_USER_IDS")
-# Backward-compatible: IDs in ALLOWED_USER_IDS can use the bot, but are not admins.
 ENV_ALLOWED_IDS = _ids_from_env("ALLOWED_USER_IDS")
 
 def _load_allowed():
@@ -128,8 +127,11 @@ def category_keyboard(c,kind):
 
 legacy.stamp_quick_keyboard=compact_keyboard
 _original_callback=legacy.on_callback
+
 async def compact_callback(update,context):
     q=update.callback_query; data=q.data or ""
+    # IMPORTANT: legacy.on_callback() already calls q.answer(). Only answer here
+    # for callbacks handled completely by this v1.8.x compact UI layer.
     if data.startswith("qcat:"):
         await q.answer(); kind=data.split(":",1)[1]
         if kind=="back": return await legacy.show_stamp_settings(q,context)
