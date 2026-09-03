@@ -100,14 +100,13 @@ _original_callback=legacy.on_callback
 
 async def compact_callback(update,context):
     q=update.callback_query; data=q.data or ""
-    # Handle the first mode/source transitions here instead of forwarding them
-    # through the legacy callback chain. This removes the silent mode-button bug.
     if data.startswith("mode:"):
         await q.answer(); mode=data.split(":",1)[1]; context.user_data.clear(); context.user_data["mode"]=mode
         if mode=="stamp": return await q.edit_message_text("Режим: 🍰 Штамп. Выбери источник:",reply_markup=legacy.source_keyboard("stamp"))
         context.user_data["source"]="text"; return await q.edit_message_text("Режим: 🎂 Топпер. Напиши текст для топпера.")
     if data.startswith("source:"):
-        await q.answer(); context.user_data["source"]=data.split(":1)[1] if False else data.split(":",1)[1]
+        await q.answer()
+        context.user_data["source"] = data.split(":", 1)[1]
         return await q.edit_message_text("Напиши текст." if context.user_data["source"]=="text" else "Пришли картинку или логотип.")
     if data.startswith("qcat:"):
         await q.answer(); kind=data.split(":",1)[1]
