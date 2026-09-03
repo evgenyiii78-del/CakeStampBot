@@ -1,8 +1,8 @@
-"""CakeStampBot v1.9.2 automatic text fit for stamp.
+"""CakeStampBot v1.9.3 smooth auto-fit stamp text.
 
-Text is scaled on the cleaned unbuffered centerline so the final text block grows
-to the available stamp area while keeping approximately 15 mm from the edge.
-The final stroke is still exactly 0.25 mm. Topper is intentionally untouched.
+Text is rasterized at higher TTF resolution, cleaned and smoothed again AFTER
+auto-fit scaling, then stroked at exactly 0.25 mm. This prevents enlarged
+polygonal/jagged centerlines. Topper is intentionally untouched.
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ SAFE_MARGIN_MM = 15.0
 LINE_GAP_FACTOR = 0.08
 MIN_LINE_MM = 0.12
 MIN_POLY_AREA_MM2 = 0.004
+TTF_RASTER_PX_PER_MM = 60
 
 
 def _line_parts(geom):
@@ -36,7 +37,6 @@ def _line_parts(geom):
 
 
 def _clean_centerline(geom):
-    """Drop degenerate/micro line fragments without topology operations on lines."""
     parts=[]
     for line in _line_parts(geom):
         if line.length < MIN_LINE_MM:
@@ -63,8 +63,19 @@ def _clean_centerline(geom):
     return MultiLineString(parts)
 
 
+def _post_scale_smooth(geom):
+    """Re-smooth after enlargement so raster/skeleton corners are not magnified."""
+    geom=_clean_centerline(geom)
+    if geom is None or geom.is_empty:
+        return geom
+    try:
+        geom=_se._smooth_text_centerlines(geom)
+    except Exception:
+        pass
+    return _clean_centerline(geom)
+
+
 def _fit_centerline_to_safe_area(line_geom, max_width_mm: float, max_height_mm: float):
-    """Uniformly enlarge/reduce the whole text block to the 15 mm safe box."""
     line_geom=_clean_centerline(line_geom)
     if line_geom is None or line_geom.is_empty:
         return line_geom
@@ -72,10 +83,6 @@ def _fit_centerline_to_safe_area(line_geom, max_width_mm: float, max_height_mm: 
     minx,miny,maxx,maxy=line_geom.bounds
     w=max(maxx-minx,1e-9)
     h=max(maxy-miny,1e-9)
-
-    # AUTO-FIT: use the available safe area itself as the limiting size.
-    # This fixes the previous behavior where requested text height capped the
-    # scale and left long/multiline text too small in the center of the stamp.
     factor=min(float(max_width_mm)/w, float(max_height_mm)/h)
 
     scaled=affinity.scale(line_geom,xfact=factor,yfact=factor,origin=(0.0,0.0))
@@ -85,7 +92,7 @@ def _fit_centerline_to_safe_area(line_geom, max_width_mm: float, max_height_mm: 
         xoff=-(bx0+bx1)/2.0,
         yoff=-(by0+by1)/2.0,
     )
-    return _clean_centerline(scaled)
+    return _post_scale_smooth(scaled)
 
 
 def _polygon_parts(shape):
@@ -101,7 +108,6 @@ def _polygon_parts(shape):
 
 
 def _repair_stroke(shape):
-    """Conservative polygon repair; avoids simplify/offset cycles that can lose vertices."""
     if shape is None or shape.is_empty:
         return shape
     try:
@@ -145,6 +151,14 @@ def build_stamp_from_text(*, text, output_dir, base_size="105", base_shape="roun
 
     original_stroke=_se._stroke_clean_single_line
     original_scene=_se._build_scene
+    original_ttf_centerline=_se._ttf_outline_to_exact_centerline_stroke
+
+    def high_res_ttf_centerline(outline_shape, line_width, raster_px_per_mm=42):
+        return original_ttf_centerline(
+            outline_shape,
+            line_width,
+            raster_px_per_mm=TTF_RASTER_PX_PER_MM,
+        )
 
     def sized_exact_stroke(centerline,_line_width):
         centerline=_fit_centerline_to_safe_area(centerline,safe_w,safe_h)
@@ -158,7 +172,7 @@ def build_stamp_from_text(*, text, output_dir, base_size="105", base_shape="roun
                     exact_width/2.0,
                     cap_style=1,
                     join_style=1,
-                    resolution=16,
+                    resolution=32,
                 )
                 if poly is not None and not poly.is_empty:
                     buffered.append(poly)
@@ -194,13 +208,16 @@ def build_stamp_from_text(*, text, output_dir, base_size="105", base_shape="roun
             "safe_text_width_mm":safe_w,
             "safe_text_height_mm":safe_h,
             "line_gap_factor":LINE_GAP_FACTOR,
+            "ttf_raster_px_per_mm":TTF_RASTER_PX_PER_MM,
+            "post_scale_smoothing":True,
             "text_fit_mode":"auto_fill_safe_box_15mm",
             "stroke_width_mode":"independent_exact_0.25mm_line_buffers",
-            "geometry_stability":"v1.9.2",
+            "geometry_stability":"v1.9.3",
         })
         kwargs["meta_extra"]=meta
         return original_scene(*args,**kwargs)
 
+    _se._ttf_outline_to_exact_centerline_stroke=high_res_ttf_centerline
     _se._stroke_clean_single_line=sized_exact_stroke
     _se._build_scene=exact_preview_scene
     try:
@@ -216,5 +233,6 @@ def build_stamp_from_text(*, text, output_dir, base_size="105", base_shape="roun
             layout_mode=layout_mode,
         )
     finally:
+        _se._ttf_outline_to_exact_centerline_stroke=original_ttf_centerline
         _se._stroke_clean_single_line=original_stroke
         _se._build_scene=original_scene
