@@ -1,8 +1,9 @@
-"""Experimental Blender text engine for CakeStampBot v2.0.1-alpha Smooth Curves.
+"""Experimental Blender text engine for CakeStampBot v2.0.2-alpha.
 
 Only straight text stamps are handled here for the first test. The existing
 stamp_v172 engine remains the fallback for unsupported modes or Blender errors.
-This revision changes only curve quality: layout, scaling and margins stay intact.
+This revision keeps model geometry/layout unchanged and improves preview
+anti-aliasing using supersampling + LANCZOS downsampling.
 """
 from __future__ import annotations
 
@@ -32,6 +33,8 @@ SAFE_MARGIN_MM = 15.0
 LINE_WIDTH_MM = 0.25
 CENTERLINE_PPM = 96
 RESAMPLE_STEP_MM = 0.025
+PREVIEW_SIZE = 1400
+PREVIEW_SS = 3
 
 
 def blender_binary() -> str | None:
@@ -139,8 +142,13 @@ def _resample_path(line: LineString, step: float = RESAMPLE_STEP_MM):
 
 
 def _make_preview(path: Path, base_shape: str, nominal: float, rw: float, rh: float, paths):
-    W = H = 1400
-    pad = 95
+    """High quality preview only. Does not change 3MF geometry."""
+    out_w = out_h = PREVIEW_SIZE
+    ss = PREVIEW_SS
+    W = out_w * ss
+    H = out_h * ss
+    pad = 95 * ss
+
     img = Image.new("RGB", (W, H), (246, 243, 235))
     draw = ImageDraw.Draw(img)
 
@@ -151,22 +159,47 @@ def _make_preview(path: Path, base_shape: str, nominal: float, rw: float, rh: fl
     def xy(x, y):
         return (W / 2 + x * scale, H / 2 - y * scale)
 
+    outline_w = max(2 * ss, 5 * ss)
     if base_shape == "rect":
         x0, y0 = xy(-rw / 2, rh / 2)
         x1, y1 = xy(rw / 2, -rh / 2)
-        draw.rounded_rectangle((x0, y0, x1, y1), radius=24, fill=(232, 195, 121), outline=(135, 91, 38), width=5)
+        draw.rounded_rectangle(
+            (x0, y0, x1, y1),
+            radius=24 * ss,
+            fill=(232, 195, 121),
+            outline=(135, 91, 38),
+            width=outline_w,
+        )
     else:
         x0, y0 = xy(-nominal / 2, nominal / 2)
         x1, y1 = xy(nominal / 2, -nominal / 2)
-        draw.ellipse((x0, y0, x1, y1), fill=(232, 195, 121), outline=(135, 91, 38), width=5)
+        draw.ellipse(
+            (x0, y0, x1, y1),
+            fill=(232, 195, 121),
+            outline=(135, 91, 38),
+            width=outline_w,
+        )
 
-    px_width = max(3, int(round(LINE_WIDTH_MM * scale)))
+    px_width = max(3 * ss, int(round(LINE_WIDTH_MM * scale)))
     for pts in paths:
         if len(pts) >= 2:
-            draw.line([xy(x, y) for x, y in pts], fill=(25, 92, 58), width=px_width, joint="curve")
+            screen_pts = [xy(x, y) for x, y in pts]
+            draw.line(
+                screen_pts,
+                fill=(25, 92, 58),
+                width=px_width,
+                joint="curve",
+            )
+            # Round terminal caps in the preview so zoomed Telegram images do
+            # not show square/pixel-stepped ends.
+            r = px_width / 2.0
+            for ex, ey in (screen_pts[0], screen_pts[-1]):
+                draw.ellipse((ex-r, ey-r, ex+r, ey+r), fill=(25, 92, 58))
 
-    draw.text((100, 45), "CakeStampBot v2.0.1-alpha · Smooth Curves", fill=(35, 35, 35))
-    img.save(path)
+    draw.text((100 * ss, 45 * ss), "CakeStampBot v2.0.2-alpha · AA Preview", fill=(35, 35, 35))
+
+    img = img.resize((out_w, out_h), Image.Resampling.LANCZOS)
+    img.save(path, optimize=True)
 
 
 def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_shape="round",
@@ -258,7 +291,7 @@ def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_sha
     _make_preview(preview_png, base_shape, nominal, rw, rh, paths)
 
     meta = {
-        "version": "2.0.1-alpha",
+        "version": "2.0.2-alpha",
         "engine": "blender_text_ribbon_smooth",
         "font_choice": font_choice,
         "font_path": ttf.font_path,
@@ -270,6 +303,7 @@ def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_sha
         "safe_margin_mm": SAFE_MARGIN_MM,
         "centerline_ppm": CENTERLINE_PPM,
         "resample_step_mm": RESAMPLE_STEP_MM,
+        "preview_supersampling": PREVIEW_SS,
         "text_path": "normal",
         "layout_mode": layout_mode,
     }
