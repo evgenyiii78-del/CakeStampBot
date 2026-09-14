@@ -1,7 +1,11 @@
-"""Experimental Blender text engine for CakeStampBot v2.0.0-alpha.
+"""Experimental Blender text engine for CakeStampBot v2.0.1-alpha.
 
-Only straight text stamps are handled here for the first test. The existing
-stamp_v172 engine remains the fallback for unsupported modes or Blender errors.
+Straight text stamps are handled here. The existing stamp_v172 engine remains
+as fallback for unsupported modes or Blender errors.
+
+v2.0.1-alpha fixes a bad second smoothing pass after scaling which could make
+centerlines overshoot the safe area and produce a massively zoomed/cropped
+preview. The final centerline is now hard-fitted to the 15 mm safe box.
 """
 from __future__ import annotations
 
@@ -31,6 +35,7 @@ SAFE_MARGIN_MM = 15.0
 LINE_WIDTH_MM = 0.25
 CENTERLINE_PPM = 72
 RESAMPLE_STEP_MM = 0.055
+FIT_EPS = 1e-6
 
 
 def blender_binary() -> str | None:
@@ -110,22 +115,43 @@ def _outline_to_centerline(outline_shape, ppm: int = CENTERLINE_PPM):
     return centerline
 
 
-def _fit_centerline(geom, max_w: float, max_h: float):
-    minx, miny, maxx, maxy = geom.bounds
-    w = max(maxx - minx, 1e-9)
-    h = max(maxy - miny, 1e-9)
-    factor = min(float(max_w) / w, float(max_h) / h)
-    geom = affinity.scale(geom, xfact=factor, yfact=factor, origin=(0.0, 0.0))
-    try:
-        geom = _se._smooth_text_centerlines(geom)
-    except Exception:
-        pass
+def _center_geom(geom):
     bx0, by0, bx1, by1 = geom.bounds
     return affinity.translate(
         geom,
         xoff=-(bx0 + bx1) / 2.0,
         yoff=-(by0 + by1) / 2.0,
     )
+
+
+def _fit_centerline(geom, max_w: float, max_h: float):
+    """Uniform hard-fit. Final geometry is guaranteed inside max_w x max_h."""
+    if geom is None or geom.is_empty:
+        raise RuntimeError("Blender engine: пустой centerline перед fit.")
+
+    geom = _center_geom(geom)
+    minx, miny, maxx, maxy = geom.bounds
+    w = max(maxx - minx, FIT_EPS)
+    h = max(maxy - miny, FIT_EPS)
+
+    factor = min(float(max_w) / w, float(max_h) / h)
+    geom = affinity.scale(geom, xfact=factor, yfact=factor, origin=(0.0, 0.0))
+    geom = _center_geom(geom)
+
+    # IMPORTANT: do not smooth again after enlargement. Cubic spline smoothing
+    # after scaling can overshoot far outside the fitted bounds. Smoothing has
+    # already been done in _outline_to_centerline at high raster resolution.
+
+    # Defensive second fit. If any operation changed bounds, clamp again.
+    minx, miny, maxx, maxy = geom.bounds
+    w = max(maxx - minx, FIT_EPS)
+    h = max(maxy - miny, FIT_EPS)
+    if w > float(max_w) + 0.001 or h > float(max_h) + 0.001:
+        correction = min(float(max_w) / w, float(max_h) / h)
+        geom = affinity.scale(geom, xfact=correction, yfact=correction, origin=(0.0, 0.0))
+        geom = _center_geom(geom)
+
+    return geom
 
 
 def _resample_path(line: LineString, step: float = RESAMPLE_STEP_MM):
@@ -135,6 +161,16 @@ def _resample_path(line: LineString, step: float = RESAMPLE_STEP_MM):
     ds = np.linspace(0.0, float(line.length), n)
     pts = [line.interpolate(float(d)) for d in ds]
     return [(float(p.x), float(p.y)) for p in pts]
+
+
+def _paths_bounds(paths):
+    xs=[]; ys=[]
+    for pts in paths:
+        for x,y in pts:
+            xs.append(float(x)); ys.append(float(y))
+    if not xs:
+        return (0.0,0.0,0.0,0.0)
+    return (min(xs),min(ys),max(xs),max(ys))
 
 
 def _make_preview(path: Path, base_shape: str, nominal: float, rw: float, rh: float, paths):
@@ -164,7 +200,9 @@ def _make_preview(path: Path, base_shape: str, nominal: float, rw: float, rh: fl
         if len(pts) >= 2:
             draw.line([xy(x, y) for x, y in pts], fill=(25, 92, 58), width=px_width, joint="curve")
 
-    draw.text((80, 35), "CakeStampBot v2.0.0-alpha · Blender Text Engine", fill=(35, 35, 35))
+    bx0,by0,bx1,by1=_paths_bounds(paths)
+    draw.text((80, 35), "CakeStampBot v2.0.1-alpha · Blender Text Engine", fill=(35, 35, 35))
+    draw.text((80, 930), f"text bounds: {bx1-bx0:.1f} x {by1-by0:.1f} mm · margin {SAFE_MARGIN_MM:.0f} mm", fill=(55,55,55))
     img.save(path)
 
 
@@ -203,6 +241,12 @@ def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_sha
             paths.append(pts)
     if not paths:
         raise RuntimeError("Blender engine: centerline paths are empty")
+
+    # Final sanity check before sending coordinates to Blender.
+    bx0,by0,bx1,by1=_paths_bounds(paths)
+    pw=max(bx1-bx0,FIT_EPS); ph=max(by1-by0,FIT_EPS)
+    if pw > safe_w + 0.05 or ph > safe_h + 0.05:
+        raise RuntimeError(f"Blender engine fit overflow: {pw:.2f}x{ph:.2f} mm > {safe_w:.2f}x{safe_h:.2f} mm")
 
     safe_name = _se._safe_text_filename(text)
     job_path = output / f"{safe_name}_blender_job.json"
@@ -257,7 +301,7 @@ def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_sha
     _make_preview(preview_png, base_shape, nominal, rw, rh, paths)
 
     meta = {
-        "version": "2.0.0-alpha",
+        "version": "2.0.1-alpha",
         "engine": "blender_text_ribbon",
         "font_choice": font_choice,
         "font_path": ttf.font_path,
@@ -268,6 +312,7 @@ def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_sha
         "line_width_mm": LINE_WIDTH_MM,
         "safe_margin_mm": SAFE_MARGIN_MM,
         "centerline_ppm": CENTERLINE_PPM,
+        "text_bounds_mm": [float(pw), float(ph)],
         "text_path": "normal",
         "layout_mode": layout_mode,
     }
