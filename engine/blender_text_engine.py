@@ -1,7 +1,8 @@
-"""Experimental Blender text engine for CakeStampBot v2.0.0-alpha.
+"""Experimental Blender text engine for CakeStampBot v2.0.1-alpha Smooth Curves.
 
 Only straight text stamps are handled here for the first test. The existing
 stamp_v172 engine remains the fallback for unsupported modes or Blender errors.
+This revision changes only curve quality: layout, scaling and margins stay intact.
 """
 from __future__ import annotations
 
@@ -29,8 +30,8 @@ BASE_H = 0.6
 RELIEF_H = 6.5
 SAFE_MARGIN_MM = 15.0
 LINE_WIDTH_MM = 0.25
-CENTERLINE_PPM = 72
-RESAMPLE_STEP_MM = 0.055
+CENTERLINE_PPM = 96
+RESAMPLE_STEP_MM = 0.025
 
 
 def blender_binary() -> str | None:
@@ -70,9 +71,9 @@ def _outline_to_centerline(outline_shape, ppm: int = CENTERLINE_PPM):
 
     minx, miny, maxx, maxy = outline_shape.bounds
     pad_mm = 2.0
-    ppm = int(max(48, min(96, ppm)))
-    width_px = max(96, int(round((maxx - minx + 2 * pad_mm) * ppm)))
-    height_px = max(96, int(round((maxy - miny + 2 * pad_mm) * ppm)))
+    ppm = int(max(72, min(120, ppm)))
+    width_px = max(128, int(round((maxx - minx + 2 * pad_mm) * ppm)))
+    height_px = max(128, int(round((maxy - miny + 2 * pad_mm) * ppm)))
 
     mask = PILImage.new("L", (width_px, height_px), 0)
     draw = PILImageDraw.Draw(mask)
@@ -102,11 +103,11 @@ def _outline_to_centerline(outline_shape, ppm: int = CENTERLINE_PPM):
         xoff=-(bx0 + bx1) / 2.0,
         yoff=-(by0 + by1) / 2.0,
     )
-    centerline = _se._remove_tiny_centerline_parts(centerline, min_length_mm=0.22)
-    centerline = _se._prune_short_terminal_spurs(centerline, max_spur_mm=0.52)
+    centerline = _se._remove_tiny_centerline_parts(centerline, min_length_mm=0.18)
+    centerline = _se._prune_short_terminal_spurs(centerline, max_spur_mm=0.48)
     centerline = _se._smooth_text_centerlines(centerline)
-    centerline = _se._remove_tiny_centerline_parts(centerline, min_length_mm=0.20)
-    centerline = _se._prune_short_terminal_spurs(centerline, max_spur_mm=0.38)
+    centerline = _se._remove_tiny_centerline_parts(centerline, min_length_mm=0.18)
+    centerline = _se._prune_short_terminal_spurs(centerline, max_spur_mm=0.34)
     return centerline
 
 
@@ -131,15 +132,15 @@ def _fit_centerline(geom, max_w: float, max_h: float):
 def _resample_path(line: LineString, step: float = RESAMPLE_STEP_MM):
     if line.length <= step:
         return [(float(x), float(y)) for x, y in line.coords]
-    n = max(4, int(math.ceil(line.length / step)) + 1)
+    n = max(8, int(math.ceil(line.length / step)) + 1)
     ds = np.linspace(0.0, float(line.length), n)
     pts = [line.interpolate(float(d)) for d in ds]
     return [(float(p.x), float(p.y)) for p in pts]
 
 
 def _make_preview(path: Path, base_shape: str, nominal: float, rw: float, rh: float, paths):
-    W = H = 1000
-    pad = 70
+    W = H = 1400
+    pad = 95
     img = Image.new("RGB", (W, H), (246, 243, 235))
     draw = ImageDraw.Draw(img)
 
@@ -153,18 +154,18 @@ def _make_preview(path: Path, base_shape: str, nominal: float, rw: float, rh: fl
     if base_shape == "rect":
         x0, y0 = xy(-rw / 2, rh / 2)
         x1, y1 = xy(rw / 2, -rh / 2)
-        draw.rounded_rectangle((x0, y0, x1, y1), radius=18, fill=(232, 195, 121), outline=(135, 91, 38), width=4)
+        draw.rounded_rectangle((x0, y0, x1, y1), radius=24, fill=(232, 195, 121), outline=(135, 91, 38), width=5)
     else:
         x0, y0 = xy(-nominal / 2, nominal / 2)
         x1, y1 = xy(nominal / 2, -nominal / 2)
-        draw.ellipse((x0, y0, x1, y1), fill=(232, 195, 121), outline=(135, 91, 38), width=4)
+        draw.ellipse((x0, y0, x1, y1), fill=(232, 195, 121), outline=(135, 91, 38), width=5)
 
-    px_width = max(2, int(round(LINE_WIDTH_MM * scale)))
+    px_width = max(3, int(round(LINE_WIDTH_MM * scale)))
     for pts in paths:
         if len(pts) >= 2:
             draw.line([xy(x, y) for x, y in pts], fill=(25, 92, 58), width=px_width, joint="curve")
 
-    draw.text((80, 35), "CakeStampBot v2.0.0-alpha · Blender Text Engine", fill=(35, 35, 35))
+    draw.text((100, 45), "CakeStampBot v2.0.1-alpha · Smooth Curves", fill=(35, 35, 35))
     img.save(path)
 
 
@@ -191,7 +192,7 @@ def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_sha
         target_width_mm=max(8.0, safe_w),
         target_height_mm=max(8.0, safe_h),
         line_spacing=0.86,
-        curve_steps=32,
+        curve_steps=48,
     )
     centerline = _outline_to_centerline(ttf.geometry, CENTERLINE_PPM)
     centerline = _fit_centerline(centerline, safe_w, safe_h)
@@ -257,8 +258,8 @@ def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_sha
     _make_preview(preview_png, base_shape, nominal, rw, rh, paths)
 
     meta = {
-        "version": "2.0.0-alpha",
-        "engine": "blender_text_ribbon",
+        "version": "2.0.1-alpha",
+        "engine": "blender_text_ribbon_smooth",
         "font_choice": font_choice,
         "font_path": ttf.font_path,
         "base_shape": base_shape,
@@ -268,6 +269,7 @@ def build_stamp_from_text_blender(*, text, output_dir, base_size="105", base_sha
         "line_width_mm": LINE_WIDTH_MM,
         "safe_margin_mm": SAFE_MARGIN_MM,
         "centerline_ppm": CENTERLINE_PPM,
+        "resample_step_mm": RESAMPLE_STEP_MM,
         "text_path": "normal",
         "layout_mode": layout_mode,
     }
