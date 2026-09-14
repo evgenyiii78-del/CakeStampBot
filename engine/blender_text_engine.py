@@ -19,10 +19,7 @@ from PIL import Image, ImageDraw
 from shapely import affinity
 from shapely.geometry import LineString, MultiLineString, GeometryCollection
 
-from .common import (
-    BASE_H if False else parse_size,
-)
-from .common import export_bundle, heart_mesh, mask_to_centerline_line
+from .common import export_bundle, heart_mesh, mask_to_centerline_line, parse_size
 from . import stamp_engine as _se
 from .ttf_vector_engine import text_to_ttf_geometry
 
