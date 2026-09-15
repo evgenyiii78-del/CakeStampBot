@@ -10,21 +10,17 @@ logger = logging.getLogger("CakeStampEngine.Dispatch")
 
 
 def build_stamp_from_text(**kwargs):
-    """Use Blender for straight text stamps when available; otherwise fall back safely."""
-    mode = os.getenv("STAMP_TEXT_ENGINE", "auto").strip().lower()
-    text_path = str(kwargs.get("text_path", "normal") or "normal").lower()
+    """v2.1.0: Blender is primary for every text-stamp path; legacy is fallback."""
+    mode=os.getenv("STAMP_TEXT_ENGINE","auto").strip().lower()
+    wants_blender=mode in {"auto","blender","blender_strict"}
 
-    wants_blender = mode in {"auto", "blender", "blender_strict"}
-    supported = text_path == "normal"
-
-    if wants_blender and supported and blender_available():
+    if wants_blender and blender_available():
         try:
-            logger.info("TEXT ENGINE: Blender v2.0.0-alpha")
+            logger.info("TEXT STAMP ENGINE: Blender v2.1.0 | path=%s",kwargs.get("text_path","normal"))
             return build_stamp_from_text_blender(**kwargs)
         except Exception:
-            logger.exception("Blender text engine failed")
-            if mode == "blender_strict":
-                raise
+            logger.exception("Blender stamp text engine failed; using legacy fallback")
+            if mode=="blender_strict": raise
 
-    logger.info("TEXT ENGINE: legacy stamp_v172 fallback")
+    logger.info("TEXT STAMP ENGINE: legacy stamp_v172 fallback")
     return _build_stamp_from_text_legacy(**kwargs)
