@@ -1,10 +1,10 @@
-"""CakeStampBot v2.2.4 — fixed stamp panel callback routing."""
+"""CakeStampBot v2.2.5 — stable callback router."""
 import json, os
 from pathlib import Path
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 import bot_legacy as legacy
-VERSION="2.2.4"
+VERSION="2.2.5"
 ACCESS_FILE=Path(os.getenv("DATA_DIR","data"))/"allowed_users.json";ACCESS_FILE.parent.mkdir(parents=True,exist_ok=True)
 def _ids(name):
  out=set()
@@ -45,7 +45,7 @@ def panel_text(c):
  if d.get("add_crown"):lines.append("👑 Положение: "+("сверху" if d.get("crown_position")=="top" else "снизу"))
  lines += [f"📏 Подложка: {d.get('base_size','105')} мм · {shape}"]
  if d.get("source","text")=="text":lines += [f"🔤 {legacy.stamp_font_name(c)} · {float(d.get('text_size_mm',12)):g} мм · {p}"]
- lines += ["✏️ Линия: 0.25 мм",f"🧩 3MF: {'Отдельно' if d.get('layout_mode')=='separate' else 'Собрать'}","","Выбирай параметры кнопками ниже 👇"]
+ lines += ["✏️ Линия: 0.25 мм",f"🧩 3MF: {'Отдельно' if d.get('layout_mode')=='separate' else 'Собрать'}","",f"Версия панели: {VERSION}","Выбирай параметры кнопками ниже 👇"]
  return "\n".join(lines)
 def panel_kb(c):
  defaults(c);d=c.user_data;s=str(d.get("base_size","105"));sh=d.get("base_shape","round");p=d.get("text_path","normal");f=d.get("font_choice","classic");h=float(d.get("text_size_mm",12));cp=d.get("crown_position","top")
@@ -66,9 +66,11 @@ async def help_cmd(u,c):await u.message.reply_text(f"CakeStampBot v{VERSION}\n\n
 async def callback(u,c):
  q=u.callback_query;data=q.data or ""
  try:
-  legacy.logger.info("v%s callback=%s user=%s",VERSION,data,u.effective_user.id if u.effective_user else 0);await q.answer()
-  if data in ("source:text","ui:source:text"):c.user_data.clear();c.user_data.update(mode="stamp",source="text",step="text");return await q.edit_message_text("✍️ Напиши текст штампа одним сообщением.")
-  if data in ("source:image","ui:source:image"):c.user_data.clear();c.user_data.update(mode="stamp",source="image",step="photo");return await q.edit_message_text("🖼 Пришли картинку или логотип.")
+  legacy.logger.info("v%s callback=%s user=%s",VERSION,data,u.effective_user.id if u.effective_user else 0)
+  # Delegate legacy/topper callbacks BEFORE answering: legacy.on_callback answers them itself.
+  if data.startswith(("mode:","source:","font:","stamp_size:","stamp_shape:","rect_size:","heart:","layout:","topper_")):
+   return await legacy.on_callback(u,c)
+  await q.answer()
   if data in ("ui:heart","qs:heart"):c.user_data["add_heart"]=not bool(c.user_data.get("add_heart"));return await show(q,c)
   if data in ("ui:crown","qs:crown"):c.user_data["add_crown"]=not bool(c.user_data.get("add_crown"));return await show(q,c)
   if data=="ui:noextras":c.user_data["add_heart"]=False;c.user_data["add_crown"]=False;return await show(q,c)
@@ -81,9 +83,6 @@ async def callback(u,c):
   if data in ("ui:layout","qs:layout"):c.user_data["layout_mode"]="assembled" if c.user_data.get("layout_mode")=="separate" else "separate";return await show(q,c)
   if data in ("ui:create","create"):return await legacy.enqueue_job(q.message,c)
   if data in ("ui:restart","restart"):c.user_data.clear();return await q.edit_message_text("Начинаем заново. Используй меню внизу.")
-  # Topper and legacy wizard callbacks: legacy handler owns these. It will answer callback itself.
-  if data.startswith(("mode:","source:","font:","stamp_size:","stamp_shape:","rect_size:","heart:","layout:","topper_")):
-   return await legacy.on_callback(u,c)
   legacy.logger.warning("Unknown callback: %s",data)
  except Exception:
   legacy.logger.exception("callback failed: %s",data)
