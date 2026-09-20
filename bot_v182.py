@@ -1,45 +1,45 @@
-"""CakeStampBot v2.2.0 — compact interactive stamp UI + access control."""
+"""CakeStampBot v2.2.1 — compact interactive stamp UI + reliable callback routing."""
 import json, os
 from pathlib import Path
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 import bot_legacy as legacy
-VERSION="2.2.0"
+VERSION="2.2.1"
 ACCESS_FILE=Path(os.getenv("DATA_DIR","data"))/"allowed_users.json"; ACCESS_FILE.parent.mkdir(parents=True,exist_ok=True)
 def _ids(name):
  out=set()
  for x in os.getenv(name,"").replace(";",",").split(","):
   try:
-   if x.strip(): out.add(int(x.strip()))
-  except ValueError: legacy.logger.warning("Invalid %s: %s",name,x)
+   if x.strip():out.add(int(x.strip()))
+  except ValueError:legacy.logger.warning("Invalid %s: %s",name,x)
  return out
-ADMIN_IDS=_ids("ADMIN_USER_IDS"); ENV_ALLOWED_IDS=_ids("ALLOWED_USER_IDS")
+ADMIN_IDS=_ids("ADMIN_USER_IDS");ENV_ALLOWED_IDS=_ids("ALLOWED_USER_IDS")
 def _load():
- try:
-  return {int(x) for x in json.loads(ACCESS_FILE.read_text(encoding="utf-8"))} if ACCESS_FILE.exists() else set()
- except Exception: legacy.logger.exception("access file"); return set()
-def _save(ids): ACCESS_FILE.write_text(json.dumps(sorted(ids),indent=2),encoding="utf-8")
-def allowed(uid): return int(uid) in ADMIN_IDS|ENV_ALLOWED_IDS|_load()
+ try:return {int(x) for x in json.loads(ACCESS_FILE.read_text(encoding="utf-8"))} if ACCESS_FILE.exists() else set()
+ except Exception:legacy.logger.exception("access file");return set()
+def _save(ids):ACCESS_FILE.write_text(json.dumps(sorted(ids),indent=2),encoding="utf-8")
+def allowed(uid):return int(uid) in ADMIN_IDS|ENV_ALLOWED_IDS|_load()
 async def deny(u):
  uid=u.effective_user.id if u.effective_user else 0
- if u.callback_query: await u.callback_query.answer("Доступ закрыт",show_alert=True)
- if u.effective_message: await u.effective_message.reply_text(f"🔒 Доступ закрыт.\nВаш Telegram ID: {uid}")
+ if u.callback_query:await u.callback_query.answer("Доступ закрыт",show_alert=True)
+ if u.effective_message:await u.effective_message.reply_text(f"🔒 Доступ закрыт.\nВаш Telegram ID: {uid}")
 def guarded(fn):
  async def w(u,c):
-  if not allowed(u.effective_user.id if u.effective_user else 0): return await deny(u)
+  if not allowed(u.effective_user.id if u.effective_user else 0):return await deny(u)
   return await fn(u,c)
  return w
-def mark(s,on): return "✓ "+s if on else s
+def mark(s,on):return "✓ "+s if on else s
 def defaults(c):
- legacy.ensure_stamp_defaults(c); d=c.user_data
+ legacy.ensure_stamp_defaults(c);d=c.user_data
  if float(d.get("text_size_mm",12))<10:d["text_size_mm"]=12.0
  d.setdefault("base_shape","round");d.setdefault("crown_position","top");d.setdefault("add_crown",False);d.setdefault("add_heart",False);d.setdefault("layout_mode","separate")
+def source_kb():return InlineKeyboardMarkup([[InlineKeyboardButton("✍️ Текст",callback_data="ui:source:text")],[InlineKeyboardButton("🖼 Картинка / логотип",callback_data="ui:source:image")]])
 def panel_text(c):
  defaults(c);d=c.user_data;p={"normal":"Обычный","top":"Сверху","bottom":"Снизу","full":"По окружности"}.get(d.get("text_path"),"Обычный");e=[]
  if d.get("add_heart"):e.append("❤️ сердце")
  if d.get("add_crown"):e.append("👑 корона")
  if not e:e=["без дополнений"]
- shape="Круг" if d.get("base_shape")=="round" else "Прямоугольник"; lines=["🍰 НАСТРОЙКИ ШТАМПА",""]
+ shape="Круг" if d.get("base_shape")=="round" else "Прямоугольник";lines=["🍰 НАСТРОЙКИ ШТАМПА",""]
  if d.get("source","text")=="text":lines += [f"📝 {d.get('text','')}",""]
  lines += [f"✨ Дополнения: {', '.join(e)}"]
  if d.get("add_crown"):lines.append("👑 Положение: "+("сверху" if d.get("crown_position")=="top" else "снизу"))
@@ -61,13 +61,23 @@ async def show(target,c):
  else:await target.reply_text(t,reply_markup=k)
 legacy.stamp_settings_text=panel_text;legacy.stamp_quick_keyboard=panel_kb;legacy.show_stamp_settings=show
 async def start(u,c):c.user_data.clear();await u.message.reply_text(f"CakeStampBot v{VERSION}\n\nВыбери действие в меню ниже 👇",reply_markup=legacy.main_menu_keyboard())
+async def stamp_cmd(u,c):c.user_data.clear();c.user_data["mode"]="stamp";await u.message.reply_text("Режим: 🍰 Штамп. Выбери источник:",reply_markup=source_kb())
 async def help_cmd(u,c):await u.message.reply_text(f"CakeStampBot v{VERSION}\n\n🍰 Штамп — компактная панель настроек.\n👑 Корона и ❤️ сердце.\n🎂 Топпер без изменений.",reply_markup=legacy.main_menu_keyboard())
 async def callback(u,c):
  q=u.callback_query;data=q.data or ""
- if data=="ui:noextras":await q.answer();c.user_data["add_heart"]=False;c.user_data["add_crown"]=False;return await show(q,c)
- if data.startswith("ui:crownpos:"):await q.answer();c.user_data["crown_position"]=data.rsplit(":",1)[1];return await show(q,c)
- if data.startswith("ui:shape:"):await q.answer();c.user_data["base_shape"]=data.rsplit(":",1)[1];return await show(q,c)
- return await legacy.on_callback(u,c)
+ try:
+  if data=="ui:source:text":
+   await q.answer();c.user_data.clear();c.user_data.update(mode="stamp",source="text");return await q.edit_message_text("✍️ Напиши текст штампа одним сообщением.")
+  if data=="ui:source:image":
+   await q.answer();c.user_data.clear();c.user_data.update(mode="stamp",source="image");return await q.edit_message_text("🖼 Пришли картинку или логотип.")
+  if data=="ui:noextras":await q.answer();c.user_data["add_heart"]=False;c.user_data["add_crown"]=False;return await show(q,c)
+  if data.startswith("ui:crownpos:"):await q.answer();c.user_data["crown_position"]=data.rsplit(":",1)[1];return await show(q,c)
+  if data.startswith("ui:shape:"):await q.answer();c.user_data["base_shape"]=data.rsplit(":",1)[1];return await show(q,c)
+  return await legacy.on_callback(u,c)
+ except Exception as e:
+  legacy.logger.exception("callback failed: %s",data)
+  try:await q.answer("Ошибка кнопки. Попробуй ещё раз.",show_alert=True)
+  except Exception:pass
 async def users_cmd(u,c):
  if u.effective_user.id not in ADMIN_IDS:return await deny(u)
  await u.message.reply_text("🔐 Доступ:\n"+"\n".join(f"• {x}" for x in sorted(ADMIN_IDS|ENV_ALLOWED_IDS|_load())))
@@ -84,5 +94,5 @@ async def deluser(u,c):
  ids=_load();ids.discard(uid);_save(ids);await u.message.reply_text(f"🚫 Доступ закрыт: {uid}")
 async def post_init(app):await legacy.post_init(app);await app.bot.set_my_commands([("start","Главное меню"),("stamp","Штамп"),("topper","Топпер"),("queue","Очередь"),("help","Помощь")]);legacy.logger.info("CakeStampBot v%s UI started",VERSION)
 def main():
- app=Application.builder().token(legacy.BOT_TOKEN).post_init(post_init).post_shutdown(legacy.post_shutdown).build();app.add_handler(CommandHandler("start",guarded(start)));app.add_handler(CommandHandler("help",guarded(help_cmd)));app.add_handler(CommandHandler("stamp",guarded(legacy.stamp_cmd)));app.add_handler(CommandHandler("topper",guarded(legacy.topper_cmd)));app.add_handler(CommandHandler("queue",guarded(legacy.queue_cmd)));app.add_handler(CommandHandler("users",users_cmd));app.add_handler(CommandHandler("adduser",adduser));app.add_handler(CommandHandler("deluser",deluser));app.add_handler(CallbackQueryHandler(guarded(callback)));app.add_handler(MessageHandler(filters.PHOTO,guarded(legacy.on_photo)));app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,guarded(legacy.on_text)));app.add_error_handler(legacy.error_handler);app.run_polling()
+ app=Application.builder().token(legacy.BOT_TOKEN).post_init(post_init).post_shutdown(legacy.post_shutdown).build();app.add_handler(CommandHandler("start",guarded(start)));app.add_handler(CommandHandler("help",guarded(help_cmd)));app.add_handler(CommandHandler("stamp",guarded(stamp_cmd)));app.add_handler(CommandHandler("topper",guarded(legacy.topper_cmd)));app.add_handler(CommandHandler("queue",guarded(legacy.queue_cmd)));app.add_handler(CommandHandler("users",users_cmd));app.add_handler(CommandHandler("adduser",adduser));app.add_handler(CommandHandler("deluser",deluser));app.add_handler(CallbackQueryHandler(guarded(callback)));app.add_handler(MessageHandler(filters.PHOTO,guarded(legacy.on_photo)));app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,guarded(legacy.on_text)));app.add_error_handler(legacy.error_handler);app.run_polling()
 if __name__=="__main__":main()
