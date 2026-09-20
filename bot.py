@@ -1,7 +1,6 @@
-"""Bothost entrypoint for CakeStampBot v1.8.3.
+"""Bothost entrypoint for CakeStampBot v2.3.0.
 
-Bothost forces `python bot.py`.  Keep this file as a tiny bootstrap and load the
-actual compact UI entrypoint from bot_v182.py.
+Bothost starts `python bot.py`; the active application lives in bot_v182.py.
 """
 import os
 import sys
