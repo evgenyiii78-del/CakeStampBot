@@ -1,4 +1,4 @@
-"""CakeStampBot v2.1.1 Blender Stamp Engine: text + optional heart/crown."""
+"""CakeStampBot Blender stamp engine: smooth text + optional heart/crown."""
 from __future__ import annotations
 import json, logging, math, os, shutil, subprocess
 from pathlib import Path
@@ -6,7 +6,8 @@ import numpy as np, trimesh
 from PIL import Image, ImageDraw
 from shapely import affinity
 from shapely.geometry import LineString, MultiLineString, GeometryCollection
-from .common import export_bundle, heart_mesh, crown_mesh, mask_to_centerline_line, parse_size
+from shapely.ops import unary_union
+from .common import export_bundle, heart_mesh, extrude_shape, mask_to_centerline_line, parse_size
 from . import stamp_engine as _se
 from .ttf_vector_engine import text_to_ttf_geometry
 logger=logging.getLogger("CakeStampEngine.BlenderText")
@@ -26,6 +27,7 @@ def _line_parts(geom):
         if isinstance(g,LineString) and not g.is_empty:out.append(g)
         elif isinstance(g,MultiLineString):out.extend(x for x in g.geoms if not x.is_empty)
     return out
+
 def _outline_to_centerline(outline_shape,ppm=CENTERLINE_PPM):
     if outline_shape is None or outline_shape.is_empty:raise RuntimeError("Пустая TTF-геометрия.")
     minx,miny,maxx,maxy=outline_shape.bounds; pad=2.0; ppm=int(max(72,min(120,ppm))); W=max(128,int(round((maxx-minx+2*pad)*ppm))); H=max(128,int(round((maxy-miny+2*pad)*ppm))); mask=Image.new("L",(W,H),0); d=ImageDraw.Draw(mask)
@@ -36,10 +38,18 @@ def _outline_to_centerline(outline_shape,ppm=CENTERLINE_PPM):
         for ring in p.interiors:d.polygon([xy(x,y) for x,y in ring.coords],fill=0)
     c=mask_to_centerline_line(mask,ppm)
     if c is None or c.is_empty:raise RuntimeError("Не удалось получить centerline.")
-    x0,y0,x1,y1=c.bounds;c=affinity.translate(c,xoff=-(x0+x1)/2,yoff=-(y0+y1)/2);c=_se._remove_tiny_centerline_parts(c,min_length_mm=.18);c=_se._prune_short_terminal_spurs(c,max_spur_mm=.48);c=_se._smooth_text_centerlines(c);c=_se._remove_tiny_centerline_parts(c,min_length_mm=.18);return _se._prune_short_terminal_spurs(c,max_spur_mm=.34)
+    x0,y0,x1,y1=c.bounds;c=affinity.translate(c,xoff=-(x0+x1)/2,yoff=-(y0+y1)/2)
+    # Remove medial-axis whiskers created by raster skeletonization before smoothing.
+    c=_se._remove_tiny_centerline_parts(c,min_length_mm=.20)
+    c=_se._prune_short_terminal_spurs(c,max_spur_mm=.72)
+    c=_se._smooth_text_centerlines(c)
+    c=_se._remove_tiny_centerline_parts(c,min_length_mm=.20)
+    c=_se._prune_short_terminal_spurs(c,max_spur_mm=.58)
+    return c
+
 def _fit_centerline(g,max_w,max_h):
     x0,y0,x1,y1=g.bounds;f=min(float(max_w)/max(x1-x0,1e-9),float(max_h)/max(y1-y0,1e-9));g=affinity.scale(g,xfact=f,yfact=f,origin=(0,0))
-    try:g=_se._smooth_text_centerlines(g)
+    try:g=_se._smooth_text_centerlines(g);g=_se._prune_short_terminal_spurs(g,max_spur_mm=.72)
     except Exception:pass
     x0,y0,x1,y1=g.bounds;return affinity.translate(g,xoff=-(x0+x1)/2,yoff=-(y0+y1)/2)
 def _warp_centerline(g,diameter,mode):
@@ -57,10 +67,34 @@ def _warp_centerline(g,diameter,mode):
 def _resample_path(line,step=RESAMPLE_STEP_MM):
     if line.length<=step:return [(float(x),float(y)) for x,y in line.coords]
     n=max(8,int(math.ceil(line.length/step))+1);return [(float(p.x),float(p.y)) for p in (line.interpolate(float(d)) for d in np.linspace(0,float(line.length),n))]
+
+def _crown_geometry(width=28.0,height_mm=15.0,line_width=.35):
+    """Reference crown: three hollow round tips, M-shaped top and a clean slightly curved lower bar."""
+    w=float(width);h=float(height_mm);lw=float(line_width);r=max(1.05,lw*3.2)
+    L=(-w*.38,h*.25); C=(0,h*.50); R=(w*.38,h*.25); VL=(-w*.16,-h*.02); VR=(w*.16,-h*.02); BL=(-w*.50,-h*.43); BR=(w*.50,-h*.43)
+    def shortened(a,b,trim_a=0.0,trim_b=0.0):
+        ax,ay=a;bx,by=b;dx=bx-ax;dy=by-ay;ln=max(1e-9,math.hypot(dx,dy));ux,uy=dx/ln,dy/ln
+        return LineString([(ax+ux*trim_a,ay+uy*trim_a),(bx-ux*trim_b,by-uy*trim_b)])
+    segs=[shortened(BL,L,0,r*.72),shortened(L,VL,r*.72,0),shortened(VL,C,0,r*.72),shortened(C,VR,r*.72,0),shortened(VR,R,0,r*.72),shortened(R,BR,r*.72,0)]
+    # Bottom is a shallow arc, matching the approved crown reference.
+    xs=np.linspace(BL[0],BR[0],90);ys=BL[1]+0.55*(1-(xs/(w*.50))**2)
+    segs.append(LineString(np.c_[xs,ys]))
+    parts=[s.buffer(lw/2,cap_style=1,join_style=1,resolution=64) for s in segs]
+    for x,y in (L,C,R):
+        outer=LineString([(x-r,y),(x+r,y)]).buffer(r,cap_style=1,resolution=64)
+        inner=LineString([(x-r*.55,y),(x+r*.55,y)]).buffer(r*.55,cap_style=1,resolution=64)
+        parts.append(outer.difference(inner))
+    return unary_union(parts).buffer(0)
+def _crown_mesh(line_width,height,y,width=28.0,height_mm=15.0):
+    m=extrude_shape(_crown_geometry(width,height_mm,line_width),height,"Crown");m.apply_translation([0,y,0]);return m
+
 def _crown_preview_paths(nominal,base_shape):
-    w=min(28.0,nominal*.30);h=w*.54;y=(nominal*.31 if base_shape!="rect" else nominal*.25); pts=[(-w/2,y-h/2),(-w*.38,y+h*.28),(-w*.16,y-h*.02),(0,y+h/2),(w*.16,y-h*.02),(w*.38,y+h*.28),(w/2,y-h/2),(-w/2,y-h/2)]; paths=[pts]
-    for x,yy in [(-w*.38,y+h*.28),(0,y+h/2),(w*.38,y+h*.28)]:
-        r=max(1.2,LINE_WIDTH_MM*2.8);t=np.linspace(0,2*np.pi,80);paths.append([(x+r*math.cos(a),yy+r*math.sin(a)) for a in t])
+    w=min(28.0,nominal*.30);h=w*.54;y=(nominal*.31 if base_shape!="rect" else nominal*.25);r=max(1.05,LINE_WIDTH_MM*3.2)
+    L=(-w*.38,y+h*.25);C=(0,y+h*.50);R=(w*.38,y+h*.25);VL=(-w*.16,y-h*.02);VR=(w*.16,y-h*.02);BL=(-w*.50,y-h*.43);BR=(w*.50,y-h*.43)
+    paths=[[BL,L],[L,VL],[VL,C],[C,VR],[VR,R],[R,BR]]
+    xs=np.linspace(BL[0],BR[0],90);ys=BL[1]+0.55*(1-(xs/(w*.50))**2);paths.append(list(zip(xs,ys)))
+    for x,yy in (L,C,R):
+        t=np.linspace(0,2*np.pi,100);paths.append([(x+r*math.cos(a),yy+r*math.sin(a)) for a in t])
     return paths
 def _make_preview(path,base_shape,nominal,rw,rh,paths,note,add_crown=False):
     out=PREVIEW_SIZE;ss=PREVIEW_SS;W=H=out*ss;pad=95*ss;img=Image.new("RGB",(W,H),(246,243,235));d=ImageDraw.Draw(img);sx=nominal if base_shape!="rect" else rw;sy=nominal if base_shape!="rect" else rh;scale=min((W-2*pad)/sx,(H-2*pad)/sy)
@@ -72,14 +106,13 @@ def _make_preview(path,base_shape,nominal,rw,rh,paths,note,add_crown=False):
     for pts in paths+(_crown_preview_paths(nominal,base_shape) if add_crown else []):
         if len(pts)<2:continue
         q=[xy(x,y) for x,y in pts];d.line(q,fill=(25,92,58),width=pw,joint="curve")
-    d.text((100*ss,45*ss),f"CakeStampBot v2.1.1 · Blender Stamp · {note}",fill=(35,35,35));img.resize((out,out),Image.Resampling.LANCZOS).save(path,optimize=True)
+    d.text((100*ss,45*ss),f"CakeStampBot · Blender Stamp · {note}",fill=(35,35,35));img.resize((out,out),Image.Resampling.LANCZOS).save(path,optimize=True)
 def build_stamp_from_text_blender(*,text,output_dir,base_size="105",base_shape="round",line_width=.25,font_choice="classic",text_path="normal",text_size_mm=12.0,add_heart=False,add_crown=False,layout_mode="assembled"):
     blender=blender_binary()
     if not blender:raise RuntimeError("Blender executable not found")
     output=Path(output_dir);output.mkdir(parents=True,exist_ok=True);nominal,rw,rh=parse_size(base_size,base_shape);mode=str(text_path or "normal").lower();mode=mode if mode in {"normal","top","bottom","full"} else "normal";mode="normal" if base_shape!="round" else mode;safe_w=max(10,float(rw if base_shape=="rect" else nominal)-2*SAFE_MARGIN_MM);safe_h=max(10,float(rh if base_shape=="rect" else nominal)-2*SAFE_MARGIN_MM)
-    # Reserve upper area for crown so text never overlaps it.
     if add_crown and mode=="normal":safe_h=max(10,safe_h-min(18.0,nominal*.20))
-    ttf=text_to_ttf_geometry(text,fonts_dir=Path(__file__).resolve().parent.parent/"fonts",font_choice=font_choice,target_width_mm=max(8,safe_w),target_height_mm=max(8,safe_h),line_spacing=.86,curve_steps=48);c=_fit_centerline(_outline_to_centerline(ttf.geometry),safe_w,safe_h)
+    ttf=text_to_ttf_geometry(text,fonts_dir=Path(__file__).resolve().parent.parent/"fonts",font_choice=font_choice,target_width_mm=max(8,safe_w),target_height_mm=max(8,safe_h),line_spacing=.86,curve_steps=64);c=_fit_centerline(_outline_to_centerline(ttf.geometry),safe_w,safe_h)
     if add_crown and mode=="normal":c=affinity.translate(c,yoff=-min(6.0,nominal*.055))
     if mode!="normal":c=_warp_centerline(c,nominal,mode)
     paths=[]
@@ -94,5 +127,5 @@ def build_stamp_from_text_blender(*,text,output_dir,base_size="105",base_shape="
     if add_heart:
         heart=heart_mesh(.35,RELIEF_H,-nominal*.30);h=heart.copy();h.apply_translation([0,0,BASE_H]);scene.add_geometry(h,geom_name="Heart",node_name="Heart");heart_stl=output/f"{safe_name}_Heart.stl";heart.export(str(heart_stl));stls.append(str(heart_stl))
     if add_crown:
-        cw=min(28.0,nominal*.30);cy=nominal*.31 if base_shape!="rect" else rh*.30;crown=crown_mesh(.35,RELIEF_H,cy,width=cw,height_mm=cw*.54);cr=crown.copy();cr.apply_translation([0,0,BASE_H]);scene.add_geometry(cr,geom_name="Crown",node_name="Crown");crown_stl=output/f"{safe_name}_Crown.stl";crown.export(str(crown_stl));stls.append(str(crown_stl))
-    preview=output/f"{safe_name}_blender_preview.png";_make_preview(preview,base_shape,nominal,rw,rh,paths,mode,add_crown=add_crown);meta={"version":"2.1.1","engine":"blender_stamp_text","font_choice":font_choice,"font_path":ttf.font_path,"base_shape":base_shape,"base_size":base_size,"base_height_mm":BASE_H,"relief_height_mm":RELIEF_H,"line_width_mm":LINE_WIDTH_MM,"safe_margin_mm":SAFE_MARGIN_MM,"text_path":mode,"add_heart":bool(add_heart),"add_crown":bool(add_crown),"layout_mode":layout_mode};suffix="BLENDER_STAMP_SEPARATE" if layout_mode=="separate" else "BLENDER_STAMP_ASSEMBLED";return export_bundle(output,safe_name,scene,str(preview),stls,meta,suffix)
+        cw=min(28.0,nominal*.30);cy=nominal*.31 if base_shape!="rect" else rh*.30;crown=_crown_mesh(.35,RELIEF_H,cy,width=cw,height_mm=cw*.54);cr=crown.copy();cr.apply_translation([0,0,BASE_H]);scene.add_geometry(cr,geom_name="Crown",node_name="Crown");crown_stl=output/f"{safe_name}_Crown.stl";crown.export(str(crown_stl));stls.append(str(crown_stl))
+    preview=output/f"{safe_name}_blender_preview.png";_make_preview(preview,base_shape,nominal,rw,rh,paths,mode,add_crown=add_crown);meta={"engine":"blender_stamp_text","font_choice":font_choice,"font_path":ttf.font_path,"base_shape":base_shape,"base_size":base_size,"base_height_mm":BASE_H,"relief_height_mm":RELIEF_H,"line_width_mm":LINE_WIDTH_MM,"safe_margin_mm":SAFE_MARGIN_MM,"text_path":mode,"add_heart":bool(add_heart),"add_crown":bool(add_crown),"layout_mode":layout_mode};suffix="BLENDER_STAMP_SEPARATE" if layout_mode=="separate" else "BLENDER_STAMP_ASSEMBLED";return export_bundle(output,safe_name,scene,str(preview),stls,meta,suffix)
