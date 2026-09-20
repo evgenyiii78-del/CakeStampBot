@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np, trimesh
 from PIL import Image, ImageDraw
 from shapely import affinity
-from shapely.geometry import LineString, MultiLineString, GeometryCollection
+from shapely.geometry import LineString, MultiLineString, GeometryCollection, Point
 from shapely.ops import unary_union
 from .common import export_bundle, heart_mesh, extrude_shape, mask_to_centerline_line, parse_size
 from . import stamp_engine as _se
@@ -39,7 +39,6 @@ def _outline_to_centerline(outline_shape,ppm=CENTERLINE_PPM):
     c=mask_to_centerline_line(mask,ppm)
     if c is None or c.is_empty:raise RuntimeError("Не удалось получить centerline.")
     x0,y0,x1,y1=c.bounds;c=affinity.translate(c,xoff=-(x0+x1)/2,yoff=-(y0+y1)/2)
-    # Remove medial-axis whiskers created by raster skeletonization before smoothing.
     c=_se._remove_tiny_centerline_parts(c,min_length_mm=.20)
     c=_se._prune_short_terminal_spurs(c,max_spur_mm=.72)
     c=_se._smooth_text_centerlines(c)
@@ -68,33 +67,56 @@ def _resample_path(line,step=RESAMPLE_STEP_MM):
     if line.length<=step:return [(float(x),float(y)) for x,y in line.coords]
     n=max(8,int(math.ceil(line.length/step))+1);return [(float(p.x),float(p.y)) for p in (line.interpolate(float(d)) for d in np.linspace(0,float(line.length),n))]
 
+def _crown_points(width,height_mm,yoff=0.0):
+    """Proportions copied from the approved crown reference."""
+    w=float(width);h=float(height_mm);y=float(yoff)
+    return {
+        "BL":(-w*.47,y-h*.42), "L":(-w*.36,y+h*.27),
+        "VL":(-w*.16,y-h*.01), "C":(0.0,y+h*.52),
+        "VR":(w*.16,y-h*.01), "R":(w*.36,y+h*.27),
+        "BR":(w*.47,y-h*.42),
+    }
+
+def _shortened_segment(a,b,trim_a=0.0,trim_b=0.0):
+    ax,ay=a;bx,by=b;dx=bx-ax;dy=by-ay;ln=max(1e-9,math.hypot(dx,dy));ux,uy=dx/ln,dy/ln
+    return LineString([(ax+ux*trim_a,ay+uy*trim_a),(bx-ux*trim_b,by-uy*trim_b)])
+
 def _crown_geometry(width=28.0,height_mm=15.0,line_width=.35):
-    """Reference crown: three hollow round tips, M-shaped top and a clean slightly curved lower bar."""
-    w=float(width);h=float(height_mm);lw=float(line_width);r=max(1.05,lw*3.2)
-    L=(-w*.38,h*.25); C=(0,h*.50); R=(w*.38,h*.25); VL=(-w*.16,-h*.02); VR=(w*.16,-h*.02); BL=(-w*.50,-h*.43); BR=(w*.50,-h*.43)
-    def shortened(a,b,trim_a=0.0,trim_b=0.0):
-        ax,ay=a;bx,by=b;dx=bx-ax;dy=by-ay;ln=max(1e-9,math.hypot(dx,dy));ux,uy=dx/ln,dy/ln
-        return LineString([(ax+ux*trim_a,ay+uy*trim_a),(bx-ux*trim_b,by-uy*trim_b)])
-    segs=[shortened(BL,L,0,r*.72),shortened(L,VL,r*.72,0),shortened(VL,C,0,r*.72),shortened(C,VR,r*.72,0),shortened(VR,R,0,r*.72),shortened(R,BR,r*.72,0)]
-    # Bottom is a shallow arc, matching the approved crown reference.
-    xs=np.linspace(BL[0],BR[0],90);ys=BL[1]+0.55*(1-(xs/(w*.50))**2)
+    """Approved crown: 3 true hollow circular tips, M top, tapered sides and shallow curved base."""
+    w=float(width);h=float(height_mm);lw=float(line_width);r=max(1.15,lw*3.3);p=_crown_points(w,h)
+    BL,L,VL,C,VR,R,BR=(p[k] for k in ("BL","L","VL","C","VR","R","BR"))
+    # Stop every ray at the ring edge so no line crosses through a hollow tip.
+    trim=max(.0,r-lw*.45)
+    segs=[
+        _shortened_segment(BL,L,0,trim),
+        _shortened_segment(L,VL,trim,0),
+        _shortened_segment(VL,C,0,trim),
+        _shortened_segment(C,VR,trim,0),
+        _shortened_segment(VR,R,0,trim),
+        _shortened_segment(R,BR,trim,0),
+    ]
+    # The reference has an almost straight, very slightly arched lower edge.
+    xs=np.linspace(BL[0],BR[0],120);ys=BL[1]+0.45*(1-(xs/(w*.47))**2)
     segs.append(LineString(np.c_[xs,ys]))
     parts=[s.buffer(lw/2,cap_style=1,join_style=1,resolution=64) for s in segs]
+    # True circular rings (previous implementation accidentally produced capsules).
     for x,y in (L,C,R):
-        outer=LineString([(x-r,y),(x+r,y)]).buffer(r,cap_style=1,resolution=64)
-        inner=LineString([(x-r*.55,y),(x+r*.55,y)]).buffer(r*.55,cap_style=1,resolution=64)
+        outer=Point(x,y).buffer(r,resolution=96)
+        inner=Point(x,y).buffer(max(.25,r-lw),resolution=96)
         parts.append(outer.difference(inner))
     return unary_union(parts).buffer(0)
 def _crown_mesh(line_width,height,y,width=28.0,height_mm=15.0):
     m=extrude_shape(_crown_geometry(width,height_mm,line_width),height,"Crown");m.apply_translation([0,y,0]);return m
 
 def _crown_preview_paths(nominal,base_shape):
-    w=min(28.0,nominal*.30);h=w*.54;y=(nominal*.31 if base_shape!="rect" else nominal*.25);r=max(1.05,LINE_WIDTH_MM*3.2)
-    L=(-w*.38,y+h*.25);C=(0,y+h*.50);R=(w*.38,y+h*.25);VL=(-w*.16,y-h*.02);VR=(w*.16,y-h*.02);BL=(-w*.50,y-h*.43);BR=(w*.50,y-h*.43)
-    paths=[[BL,L],[L,VL],[VL,C],[C,VR],[VR,R],[R,BR]]
-    xs=np.linspace(BL[0],BR[0],90);ys=BL[1]+0.55*(1-(xs/(w*.50))**2);paths.append(list(zip(xs,ys)))
+    w=min(30.0,nominal*.31);h=w*.54;y=(nominal*.31 if base_shape!="rect" else nominal*.25);r=max(1.15,.35*3.3);p=_crown_points(w,h,y)
+    BL,L,VL,C,VR,R,BR=(p[k] for k in ("BL","L","VL","C","VR","R","BR"));trim=max(0.0,r-.35*.45)
+    paths=[]
+    for a,b,ta,tb in [(BL,L,0,trim),(L,VL,trim,0),(VL,C,0,trim),(C,VR,trim,0),(VR,R,0,trim),(R,BR,trim,0)]:
+        s=_shortened_segment(a,b,ta,tb);paths.append(list(s.coords))
+    xs=np.linspace(BL[0],BR[0],120);ys=BL[1]+0.45*(1-(xs/(w*.47))**2);paths.append(list(zip(xs,ys)))
     for x,yy in (L,C,R):
-        t=np.linspace(0,2*np.pi,100);paths.append([(x+r*math.cos(a),yy+r*math.sin(a)) for a in t])
+        t=np.linspace(0,2*np.pi,160);paths.append([(x+r*math.cos(a),yy+r*math.sin(a)) for a in t])
     return paths
 def _make_preview(path,base_shape,nominal,rw,rh,paths,note,add_crown=False):
     out=PREVIEW_SIZE;ss=PREVIEW_SS;W=H=out*ss;pad=95*ss;img=Image.new("RGB",(W,H),(246,243,235));d=ImageDraw.Draw(img);sx=nominal if base_shape!="rect" else rw;sy=nominal if base_shape!="rect" else rh;scale=min((W-2*pad)/sx,(H-2*pad)/sy)
@@ -127,5 +149,5 @@ def build_stamp_from_text_blender(*,text,output_dir,base_size="105",base_shape="
     if add_heart:
         heart=heart_mesh(.35,RELIEF_H,-nominal*.30);h=heart.copy();h.apply_translation([0,0,BASE_H]);scene.add_geometry(h,geom_name="Heart",node_name="Heart");heart_stl=output/f"{safe_name}_Heart.stl";heart.export(str(heart_stl));stls.append(str(heart_stl))
     if add_crown:
-        cw=min(28.0,nominal*.30);cy=nominal*.31 if base_shape!="rect" else rh*.30;crown=_crown_mesh(.35,RELIEF_H,cy,width=cw,height_mm=cw*.54);cr=crown.copy();cr.apply_translation([0,0,BASE_H]);scene.add_geometry(cr,geom_name="Crown",node_name="Crown");crown_stl=output/f"{safe_name}_Crown.stl";crown.export(str(crown_stl));stls.append(str(crown_stl))
+        cw=min(30.0,nominal*.31);cy=nominal*.31 if base_shape!="rect" else rh*.30;crown=_crown_mesh(.35,RELIEF_H,cy,width=cw,height_mm=cw*.54);cr=crown.copy();cr.apply_translation([0,0,BASE_H]);scene.add_geometry(cr,geom_name="Crown",node_name="Crown");crown_stl=output/f"{safe_name}_Crown.stl";crown.export(str(crown_stl));stls.append(str(crown_stl))
     preview=output/f"{safe_name}_blender_preview.png";_make_preview(preview,base_shape,nominal,rw,rh,paths,mode,add_crown=add_crown);meta={"engine":"blender_stamp_text","font_choice":font_choice,"font_path":ttf.font_path,"base_shape":base_shape,"base_size":base_size,"base_height_mm":BASE_H,"relief_height_mm":RELIEF_H,"line_width_mm":LINE_WIDTH_MM,"safe_margin_mm":SAFE_MARGIN_MM,"text_path":mode,"add_heart":bool(add_heart),"add_crown":bool(add_crown),"layout_mode":layout_mode};suffix="BLENDER_STAMP_SEPARATE" if layout_mode=="separate" else "BLENDER_STAMP_ASSEMBLED";return export_bundle(output,safe_name,scene,str(preview),stls,meta,suffix)
