@@ -66,24 +66,24 @@ async def help_cmd(u,c):await u.message.reply_text(f"CakeStampBot v{VERSION}\n\n
 async def callback(u,c):
  q=u.callback_query;data=q.data or ""
  try:
-  legacy.logger.info("v%s callback=%s user=%s",VERSION,data,u.effective_user.id if u.effective_user else 0)
-  await q.answer()
+  legacy.logger.info("v%s callback=%s user=%s",VERSION,data,u.effective_user.id if u.effective_user else 0);await q.answer()
   if data in ("source:text","ui:source:text"):c.user_data.clear();c.user_data.update(mode="stamp",source="text",step="text");return await q.edit_message_text("✍️ Напиши текст штампа одним сообщением.")
   if data in ("source:image","ui:source:image"):c.user_data.clear();c.user_data.update(mode="stamp",source="image",step="photo");return await q.edit_message_text("🖼 Пришли картинку или логотип.")
-  if data=="ui:heart":c.user_data["add_heart"]=not bool(c.user_data.get("add_heart"));return await show(q,c)
-  if data=="ui:crown":c.user_data["add_crown"]=not bool(c.user_data.get("add_crown"));return await show(q,c)
+  if data in ("ui:heart","qs:heart"):c.user_data["add_heart"]=not bool(c.user_data.get("add_heart"));return await show(q,c)
+  if data in ("ui:crown","qs:crown"):c.user_data["add_crown"]=not bool(c.user_data.get("add_crown"));return await show(q,c)
   if data=="ui:noextras":c.user_data["add_heart"]=False;c.user_data["add_crown"]=False;return await show(q,c)
   if data.startswith("ui:crownpos:"):c.user_data["crown_position"]=data.rsplit(":",1)[1];return await show(q,c)
-  if data.startswith("ui:size:"):v=data.rsplit(":",1)[1];c.user_data["base_size"]=v;c.user_data["stamp_size"]=v;return await show(q,c)
+  if data.startswith(("ui:size:","qs:size:")):v=data.rsplit(":",1)[1];c.user_data["base_size"]=v;c.user_data["stamp_size"]=v;return await show(q,c)
   if data.startswith("ui:shape:"):c.user_data["base_shape"]=data.rsplit(":",1)[1];return await show(q,c)
-  if data.startswith("ui:font:"):c.user_data["font_choice"]=data.rsplit(":",1)[1];return await show(q,c)
-  if data.startswith("ui:h:"):c.user_data["text_size_mm"]=float(data.rsplit(":",1)[1]);return await show(q,c)
-  if data.startswith("ui:path:"):c.user_data["text_path"]=data.rsplit(":",1)[1];return await show(q,c)
-  if data=="ui:layout":c.user_data["layout_mode"]="assembled" if c.user_data.get("layout_mode")=="separate" else "separate";return await show(q,c)
-  if data=="ui:create":return await legacy.enqueue_job(q.message,c)
-  if data=="ui:restart":c.user_data.clear();return await q.edit_message_text("Начинаем заново. Используй меню внизу.")
-  # Compatibility with old keyboards/messages still visible in Telegram.
-  if data.startswith("qs:") or data in ("create","restart") or data.startswith(("mode:","font:","stamp_size:","stamp_shape:","rect_size:","heart:","layout:","topper_")):return await legacy.on_callback(u,c,answered=True)
+  if data.startswith(("ui:font:","qs:font:")):c.user_data["font_choice"]=data.rsplit(":",1)[1];return await show(q,c)
+  if data.startswith(("ui:h:","qs:h:")):c.user_data["text_size_mm"]=float(data.rsplit(":",1)[1]);return await show(q,c)
+  if data.startswith(("ui:path:","qs:path:")):c.user_data["text_path"]=data.rsplit(":",1)[1];return await show(q,c)
+  if data in ("ui:layout","qs:layout"):c.user_data["layout_mode"]="assembled" if c.user_data.get("layout_mode")=="separate" else "separate";return await show(q,c)
+  if data in ("ui:create","create"):return await legacy.enqueue_job(q.message,c)
+  if data in ("ui:restart","restart"):c.user_data.clear();return await q.edit_message_text("Начинаем заново. Используй меню внизу.")
+  # Topper and legacy wizard callbacks: legacy handler owns these. It will answer callback itself.
+  if data.startswith(("mode:","source:","font:","stamp_size:","stamp_shape:","rect_size:","heart:","layout:","topper_")):
+   return await legacy.on_callback(u,c)
   legacy.logger.warning("Unknown callback: %s",data)
  except Exception:
   legacy.logger.exception("callback failed: %s",data)
