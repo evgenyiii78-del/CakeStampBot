@@ -1,10 +1,10 @@
-"""CakeStampBot v2.3.1 — ReplyKeyboard-only stamp UI."""
+"""CakeStampBot v2.3.2 — ReplyKeyboard stamp UI with explicit 3MF layout."""
 import json, os, uuid
 from pathlib import Path
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 import bot_legacy as legacy
-VERSION="2.3.1"
+VERSION="2.3.2"
 ACCESS_FILE=Path(os.getenv("DATA_DIR","data"))/"allowed_users.json";ACCESS_FILE.parent.mkdir(parents=True,exist_ok=True)
 def _ids(name):
  out=set()
@@ -35,21 +35,21 @@ def defaults(c):
  if float(d.get("text_size_mm",12))<10:d["text_size_mm"]=12.0
  d.setdefault("source","text");d.setdefault("base_shape","round");d.setdefault("crown_position","top");d.setdefault("add_crown",False);d.setdefault("add_heart",False);d.setdefault("layout_mode","separate")
 def source_kb():return ReplyKeyboardMarkup([["✍️ Текст","🖼 Картинка / логотип"],["↩️ Главное меню"]],resize_keyboard=True)
-def stamp_kb():return ReplyKeyboardMarkup([["❤️ Сердце","👑 Корона","✨ Без дополнений"],["📏 60 мм","📏 105 мм","📏 145 мм"],["⭕ Круг","▭ Прямоугольник"],["🔤 Classic","🔤 Comic","🔤 GOST"],["↕️ 10 мм","↕️ 12 мм","↕️ 14 мм","↕️ 16 мм"],["↔️ Обычный","⬆️ Сверху","⬇️ Снизу","⭕ По окружности"],["🧩 Отдельно / Собрать"],["✅ СОЗДАТЬ ШТАМП"],["↩️ Главное меню"]],resize_keyboard=True)
+def stamp_kb():return ReplyKeyboardMarkup([["❤️ Сердце","👑 Корона","✨ Без дополнений"],["📏 60 мм","📏 105 мм","📏 145 мм"],["⭕ Круг","▭ Прямоугольник"],["🔤 Classic","🔤 Comic","🔤 GOST"],["↕️ 10 мм","↕️ 12 мм","↕️ 14 мм","↕️ 16 мм"],["↔️ Обычный","⬆️ Сверху","⬇️ Снизу","⭕ По окружности"],["🧩 Отдельно","🔗 Собрать"],["✅ СОЗДАТЬ ШТАМП"],["↩️ Главное меню"]],resize_keyboard=True)
 def panel_text(c):
  defaults(c);d=c.user_data;p={"normal":"Обычный","top":"Сверху","bottom":"Снизу","full":"По окружности"}.get(d.get("text_path"),"Обычный");e=[]
  if d.get("add_heart"):e.append("❤️ сердце")
  if d.get("add_crown"):e.append("👑 корона")
  if not e:e=["без дополнений"]
- shape="Круг" if d.get("base_shape")=="round" else "Прямоугольник";src=f"📝 {d.get('text','')}" if d.get("source")=="text" else "🖼 Картинка / логотип"
+ shape="Круг" if d.get("base_shape")=="round" else "Прямоугольник";src=f"📝 {d.get('text','')}" if d.get("source")=="text" else "🖼 Картинка / логотип";layout="🧩 Отдельно" if d.get("layout_mode")=="separate" else "🔗 Собрать"
  lines=["🍰 НАСТРОЙКИ ШТАМПА",src,"",f"✨ Дополнения: {', '.join(e)}",f"📏 Подложка: {d.get('base_size','105')} мм · {shape}"]
  if d.get("source")=="text":lines.append(f"🔤 {legacy.stamp_font_name(c)} · {float(d.get('text_size_mm',12)):g} мм · {p}")
- lines += ["✏️ Линия: 0.25 мм",f"🧩 3MF: {'Отдельно' if d.get('layout_mode')=='separate' else 'Собрать'}",f"CakeStampBot v{VERSION}","","Все кнопки ниже — обычные Telegram-сообщения."]
+ lines += ["✏️ Линия: 0.25 мм",f"📦 Режим 3MF: {layout}",f"CakeStampBot v{VERSION}","","Выбери параметры, затем нажми ✅ СОЗДАТЬ ШТАМП."]
  return "\n".join(lines)
 async def show(message,c):await message.reply_text(panel_text(c),reply_markup=stamp_kb())
 async def start(u,c):c.user_data.clear();await u.message.reply_text(f"CakeStampBot v{VERSION}\n\nВыбери действие в меню ниже 👇",reply_markup=legacy.main_menu_keyboard())
 async def stamp_cmd(u,c):c.user_data.clear();c.user_data.update(mode="stamp",step="source");await u.effective_message.reply_text("Режим: 🍰 Штамп. Выбери источник:",reply_markup=source_kb())
-async def help_cmd(u,c):await u.message.reply_text(f"CakeStampBot v{VERSION}\nШтамп использует ReplyKeyboard без inline callback.\nТоппер оставлен без изменений.",reply_markup=legacy.main_menu_keyboard())
+async def help_cmd(u,c):await u.message.reply_text(f"CakeStampBot v{VERSION}\nШтамп использует обычные Telegram-кнопки.\n🧩 Отдельно и 🔗 Собрать выбираются явно.\nТоппер без изменений.",reply_markup=legacy.main_menu_keyboard())
 async def text_router(u,c):
  text=(u.message.text or "").strip();d=c.user_data;legacy.logger.info("v%s TEXT=%r mode=%s",VERSION,text,d.get("mode"))
  if text=="🍰 Штамп":return await stamp_cmd(u,c)
@@ -75,8 +75,9 @@ async def text_router(u,c):
  elif text=="⬆️ Сверху":d["text_path"]="top"
  elif text=="⬇️ Снизу":d["text_path"]="bottom"
  elif text=="⭕ По окружности":d["text_path"]="full"
- elif text=="🧩 Отдельно / Собрать":d["layout_mode"]="assembled" if d.get("layout_mode")=="separate" else "separate"
- elif text=="✅ СОЗДАТЬ ШТАМП":await u.message.reply_text("⏳ Ставлю штамп в очередь…",reply_markup=stamp_kb());return await legacy.enqueue_job(u.message,c)
+ elif text=="🧩 Отдельно":d["layout_mode"]="separate";await u.message.reply_text("🧩 Выбран режим: элементы 3MF отдельно.",reply_markup=stamp_kb())
+ elif text=="🔗 Собрать":d["layout_mode"]="assembled";await u.message.reply_text("🔗 Выбран режим: собрать элементы на подложке. Теперь нажми ✅ СОЗДАТЬ ШТАМП.",reply_markup=stamp_kb())
+ elif text=="✅ СОЗДАТЬ ШТАМП":await u.message.reply_text(f"⏳ Создаю штамп. Режим: {'Собрать' if d.get('layout_mode')=='assembled' else 'Отдельно'}…",reply_markup=stamp_kb());return await legacy.enqueue_job(u.message,c)
  else:return await u.message.reply_text("Используй кнопки настроек ниже.",reply_markup=stamp_kb())
  return await show(u.message,c)
 async def photo_router(u,c):
@@ -102,7 +103,7 @@ async def deluser(u,c):
  except:return await u.message.reply_text("/deluser 123456789")
  if uid in ADMIN_IDS:return await u.message.reply_text("❌ Нельзя удалить администратора")
  ids=_load();ids.discard(uid);_save(ids);await u.message.reply_text(f"🚫 Доступ закрыт: {uid}")
-async def post_init(app):await legacy.post_init(app);await app.bot.set_my_commands([("start","Главное меню"),("stamp","Штамп"),("topper","Топпер"),("queue","Очередь"),("help","Помощь")]);legacy.logger.info("CakeStampBot v%s Reply UI started",VERSION)
+async def post_init(app):await legacy.post_init(app);await app.bot.set_my_commands([("start","Главное меню"),("stamp","Штамп"),("topper","Топпер"),("queue","Очередь"),("help","Помощь")]);legacy.logger.info("CakeStampBot v%s started",VERSION)
 def main():
  app=Application.builder().token(legacy.BOT_TOKEN).post_init(post_init).post_shutdown(legacy.post_shutdown).build();app.add_handler(CommandHandler("start",guarded(start)));app.add_handler(CommandHandler("help",guarded(help_cmd)));app.add_handler(CommandHandler("stamp",guarded(stamp_cmd)));app.add_handler(CommandHandler("topper",guarded(legacy.topper_cmd)));app.add_handler(CommandHandler("queue",guarded(legacy.queue_cmd)));app.add_handler(CommandHandler("users",users_cmd));app.add_handler(CommandHandler("adduser",adduser));app.add_handler(CommandHandler("deluser",deluser));app.add_handler(CallbackQueryHandler(guarded(legacy_callback)));app.add_handler(MessageHandler(filters.PHOTO,guarded(photo_router)));app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,guarded(text_router)));app.add_error_handler(legacy.error_handler);app.run_polling(drop_pending_updates=True)
 if __name__=="__main__":main()
