@@ -22,10 +22,7 @@ def find_font_path(font_choice='classic'):
     bundled={'classic':['fonts/Classic.ttf','/app/fonts/Classic.ttf'], 'comic':['fonts/Comic.ttf','/app/fonts/Comic.ttf'], 'gost':['fonts/GOST.ttf','/app/fonts/GOST.ttf','fonts/GOST-type-AU.ttf','/app/fonts/GOST-type-AU.ttf']}
     for p in bundled.get(choice,[])+bundled['classic']:
         if os.path.exists(p): return p
-    candidates={
-        'classic':['/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',r'C:\Windows\Fonts\times.ttf',r'C:\Windows\Fonts\arial.ttf'],
-        'comic':[r'C:\Windows\Fonts\comic.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'],
-        'gost':[r'C:\Windows\Fonts\GOST type AU.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']}
+    candidates={'classic':['/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',r'C:\Windows\Fonts\times.ttf',r'C:\Windows\Fonts\arial.ttf'],'comic':[r'C:\Windows\Fonts\comic.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'],'gost':[r'C:\Windows\Fonts\GOST type AU.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']}
     for p in candidates.get(choice,[])+candidates['classic']:
         if os.path.exists(p): return p
     for base in ['/usr/share/fonts','/usr/local/share/fonts','/app/fonts']:
@@ -36,30 +33,21 @@ def find_font_path(font_choice='classic'):
     raise FileNotFoundError('Не найден TTF-шрифт. Используйте Dockerfile с fonts-dejavu-core или CAKESTAMP_FONT_CLASSIC.')
 
 def safe_name(s, fallback='model'):
-    out=''.join(c if c.isalnum() or c in '_-' else '_' for c in str(s))
-    out='_'.join(x for x in out.split('_') if x)
-    return out[:48] or fallback
+    out=''.join(c if c.isalnum() or c in '_-' else '_' for c in str(s)); out='_'.join(x for x in out.split('_') if x); return out[:48] or fallback
 
 def render_text_mask(text, canvas_mm=90, px_per_mm=24, font_choice='classic'):
-    margin=90; n=int(canvas_mm*px_per_mm)+2*margin
-    img=Image.new('L',(n,n),0); d=ImageDraw.Draw(img); lines=str(text).split('\n')
-    font_path=find_font_path(font_choice); fs=int(n*.17)
+    margin=90; n=int(canvas_mm*px_per_mm)+2*margin; img=Image.new('L',(n,n),0); d=ImageDraw.Draw(img); lines=str(text).split('\n'); font_path=find_font_path(font_choice); fs=int(n*.17)
     while fs>20:
-        font=ImageFont.truetype(font_path,fs); b=[d.textbbox((0,0),ln,font=font) for ln in lines]
-        widths=[x[2]-x[0] for x in b]; heights=[x[3]-x[1] for x in b]; gap=int(fs*.16)
+        font=ImageFont.truetype(font_path,fs); b=[d.textbbox((0,0),ln,font=font) for ln in lines]; widths=[x[2]-x[0] for x in b]; heights=[x[3]-x[1] for x in b]; gap=int(fs*.16)
         if max(widths or [0])<n*.80 and sum(heights)+gap*(len(lines)-1)<n*.65: break
         fs-=3
-    font=ImageFont.truetype(font_path,fs); b=[d.textbbox((0,0),ln,font=font) for ln in lines]
-    heights=[x[3]-x[1] for x in b]; gap=int(fs*.16); y=(n-(sum(heights)+gap*(len(lines)-1)))//2-20
+    font=ImageFont.truetype(font_path,fs); b=[d.textbbox((0,0),ln,font=font) for ln in lines]; heights=[x[3]-x[1] for x in b]; gap=int(fs*.16); y=(n-(sum(heights)+gap*(len(lines)-1)))//2-20
     for ln,bb,h in zip(lines,b,heights):
         x=(n-(bb[2]-bb[0]))//2; d.text((x,y-bb[1]),ln,fill=255,font=font); y+=h+gap
     return np.array(img)>40
 
 def render_image_mask(path, canvas_mm=82, px_per_mm=24):
-    margin=90; n=int(canvas_mm*px_per_mm)+2*margin
-    src=Image.open(path).convert('L'); src=ImageOps.autocontrast(src); src.thumbnail((n-2*margin,n-2*margin))
-    img=Image.new('L',(n,n),255); img.paste(src,((n-src.width)//2,(n-src.height)//2)); img=img.filter(ImageFilter.GaussianBlur(.6))
-    a=np.array(img); th=threshold_otsu(a) if a.size else 180; mask=a<th
+    margin=90; n=int(canvas_mm*px_per_mm)+2*margin; src=Image.open(path).convert('L'); src=ImageOps.autocontrast(src); src.thumbnail((n-2*margin,n-2*margin)); img=Image.new('L',(n,n),255); img.paste(src,((n-src.width)//2,(n-src.height)//2)); img=img.filter(ImageFilter.GaussianBlur(.6)); a=np.array(img); th=threshold_otsu(a) if a.size else 180; mask=a<th
     if mask.mean()>.45: mask=a>th
     return remove_small_objects(mask.astype(bool),min_size=20)
 
@@ -105,9 +93,7 @@ def chaikin(points, n=6):
 
 def resample(line, step=.16):
     if line.length<=step: return line
-    ds=np.linspace(0,line.length,max(3,int(line.length/step)))
-    ps=[line.interpolate(d) for d in ds]
-    return LineString([(p.x,p.y) for p in ps])
+    ds=np.linspace(0,line.length,max(3,int(line.length/step))); ps=[line.interpolate(d) for d in ds]; return LineString([(p.x,p.y) for p in ps])
 
 def mask_to_centerline_shape(mask, px_per_mm=24, line_width=.45, smooth=.30):
     skel=skeletonize(mask); lines=skeleton_to_polylines(skel); h,w=mask.shape; mm=1/px_per_mm; geoms=[]
@@ -118,93 +104,48 @@ def mask_to_centerline_shape(mask, px_per_mm=24, line_width=.45, smooth=.30):
         if line.length<.65: continue
         line=line.simplify(smooth,preserve_topology=False)
         if line.length<.65: continue
-        line=resample(line,.10)
-        geoms.append(line.buffer(line_width/2,cap_style=1,join_style=1,resolution=48))
+        line=resample(line,.10); geoms.append(line.buffer(line_width/2,cap_style=1,join_style=1,resolution=48))
     if not geoms: return None
-    merged=unary_union(geoms).buffer(0); eps=max(.018,line_width*.10)
-    return merged.buffer(eps,resolution=48).buffer(-eps,resolution=48).buffer(0).simplify(.015,preserve_topology=True).buffer(0)
-
+    merged=unary_union(geoms).buffer(0); eps=max(.018,line_width*.10); return merged.buffer(eps,resolution=48).buffer(-eps,resolution=48).buffer(0).simplify(.015,preserve_topology=True).buffer(0)
 
 def mask_to_centerline_line(mask, px_per_mm: int = 36):
-    """
-    Unbuffered centerline geometry from binary mask.
-    Used by stamp core to fit first and stroke later.
-    """
-    import numpy as np
-    from shapely.geometry import LineString
-    from shapely.ops import unary_union, linemerge
-    from skimage.morphology import skeletonize
-
-    arr = np.asarray(mask)
-    if arr.ndim == 3:
-        arr = arr[..., 0]
-    bin_mask = (arr > 0)
-
-    sk = skeletonize(bin_mask)
-    h, w = sk.shape
-
-    ys, xs = np.where(sk)
-    if len(xs) == 0:
-        return None
-
-    pts = {(int(x), int(y)) for x, y in zip(xs, ys)}
-    nbrs = {}
-    for x, y in pts:
-        cur = []
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                if dx == 0 and dy == 0:
-                    continue
-                p = (x + dx, y + dy)
-                if p in pts:
-                    cur.append(p)
-        nbrs[(x, y)] = cur
-
-    visited_edges = set()
-    lines = []
-
-    def mm_point(p):
-        x, y = p
-        return ((x - w / 2.0) / px_per_mm, (h / 2.0 - y) / px_per_mm)
-
-    def walk(start, nxt):
-        path = [start, nxt]
-        prev, cur = start, nxt
+    arr=np.asarray(mask); arr=arr[...,0] if arr.ndim==3 else arr; bin_mask=(arr>0); sk=skeletonize(bin_mask); h,w=sk.shape; ys,xs=np.where(sk)
+    if len(xs)==0: return None
+    pts={(int(x),int(y)) for x,y in zip(xs,ys)}; nbrs={}
+    for x,y in pts:
+        cur=[]
+        for dx in (-1,0,1):
+            for dy in (-1,0,1):
+                if dx==0 and dy==0: continue
+                p=(x+dx,y+dy)
+                if p in pts: cur.append(p)
+        nbrs[(x,y)]=cur
+    visited_edges=set(); lines=[]
+    def mm_point(p): x,y=p; return ((x-w/2.0)/px_per_mm,(h/2.0-y)/px_per_mm)
+    def walk(start,nxt):
+        path=[start,nxt]; prev,cur=start,nxt
         while True:
-            visited_edges.add(tuple(sorted((prev, cur))))
-            ns = [n for n in nbrs[cur] if n != prev]
-            if len(nbrs[cur]) != 2 or not ns:
-                break
-            n = ns[0]
-            key2 = tuple(sorted((cur, n)))
-            if key2 in visited_edges:
-                break
-            path.append(n)
-            prev, cur = cur, n
+            visited_edges.add(tuple(sorted((prev,cur)))); ns=[n for n in nbrs[cur] if n!=prev]
+            if len(nbrs[cur])!=2 or not ns: break
+            n=ns[0]; key2=tuple(sorted((cur,n)))
+            if key2 in visited_edges: break
+            path.append(n); prev,cur=cur,n
         return path
-
-    endpoints = [p for p, ns in nbrs.items() if len(ns) == 1]
-
+    endpoints=[p for p,ns in nbrs.items() if len(ns)==1]
     for ep in endpoints:
         for n in nbrs[ep]:
-            key = tuple(sorted((ep, n)))
-            if key in visited_edges:
-                continue
-            path = walk(ep, n)
-            if len(path) >= 2:
-                lines.append(LineString([mm_point(p) for p in path]))
-
-    for p, ns in nbrs.items():
+            key=tuple(sorted((ep,n)))
+            if key in visited_edges: continue
+            path=walk(ep,n)
+            if len(path)>=2: lines.append(LineString([mm_point(p) for p in path]))
+    for p,ns in nbrs.items():
         for n in ns:
-            key = tuple(sorted((p, n)))
-            if key in visited_edges:
-                continue
-            path = walk(p, n)
-            if len(path) >= 2:
-                lines.append(LineString([mm_point(pt) for pt in path]))
-
-    if not lines:
-        return None
+            key=tuple(sorted((p,n)))
+            if key in visited_edges: continue
+            path=walk(p,n)
+            if len(path)>=2: lines.append(LineString([mm_point(pt) for pt in path]))
+    if not lines: return None
+    from shapely.ops import linemerge
     return linemerge(unary_union(lines))
 
 def extrude_poly(poly,height,z0=0):
@@ -216,13 +157,11 @@ def extrude_poly(poly,height,z0=0):
         return vmap[k]
     def side(coords):
         for (x1,y1),(x2,y2) in zip(coords[:-1],coords[1:]):
-            a,b,c,d=v(x1,y1,z0),v(x2,y2,z0),v(x2,y2,z0+height),v(x1,y1,z0+height)
-            faces.extend([[a,b,c],[a,c,d]])
+            a,b,c,d=v(x1,y1,z0),v(x2,y2,z0),v(x2,y2,z0+height),v(x1,y1,z0+height); faces.extend([[a,b,c],[a,c,d]])
     for tri in triangulate(poly):
         rp=tri.representative_point()
         if not (poly.contains(rp) or poly.touches(rp)): continue
-        cs=list(tri.exterior.coords)[:3]; top=[v(x,y,z0+height) for x,y in cs]; bot=[v(x,y,z0) for x,y in cs]
-        faces.append(top); faces.append(bot[::-1])
+        cs=list(tri.exterior.coords)[:3]; top=[v(x,y,z0+height) for x,y in cs]; bot=[v(x,y,z0) for x,y in cs]; faces.append(top); faces.append(bot[::-1])
     side(list(poly.exterior.coords))
     for inn in poly.interiors: side(list(inn.coords))
     if not verts or not faces: return None
@@ -230,8 +169,7 @@ def extrude_poly(poly,height,z0=0):
 
 def extrude_shape(shape,height,name):
     if shape is None: raise RuntimeError('Пустая геометрия после обработки.')
-    polys=[shape] if isinstance(shape,Polygon) else list(shape.geoms if isinstance(shape,MultiPolygon) else getattr(shape,'geoms',[]))
-    meshes=[]
+    polys=[shape] if isinstance(shape,Polygon) else list(shape.geoms if isinstance(shape,MultiPolygon) else getattr(shape,'geoms',[])); meshes=[]
     for p in polys:
         if p.area>=.02:
             m=extrude_poly(p.buffer(0),height)
@@ -240,8 +178,7 @@ def extrude_shape(shape,height,name):
     mesh=trimesh.util.concatenate(meshes); mesh.metadata['name']=name; return mesh
 
 def center_and_fit(mesh,max_w,max_h,y_shift=0):
-    b=mesh.bounds; w=b[1,0]-b[0,0]; h=b[1,1]-b[0,1]; s=min(max_w/w,max_h/h,1.0); mesh.apply_scale([s,s,1])
-    b=mesh.bounds; mesh.apply_translation([-(b[0,0]+b[1,0])/2, -(b[0,1]+b[1,1])/2 + y_shift, 0]); return mesh
+    b=mesh.bounds; w=b[1,0]-b[0,0]; h=b[1,1]-b[0,1]; s=min(max_w/w,max_h/h,1.0); mesh.apply_scale([s,s,1]); b=mesh.bounds; mesh.apply_translation([-(b[0,0]+b[1,0])/2,-(b[0,1]+b[1,1])/2+y_shift,0]); return mesh
 
 def make_cylinder(d,h):
     m=trimesh.creation.cylinder(radius=d/2,height=h,sections=256); m.apply_translation([0,0,h/2]); return m
@@ -260,86 +197,29 @@ def parse_size(val, shape='round'):
     return (n,n,round(n*.75,1)) if shape=='rect' else (n,n,n)
 
 def heart_mesh(line_width,height,y=-31):
-    t=np.linspace(0,2*np.pi,320); x=16*np.sin(t)**3; yy=13*np.cos(t)-5*np.cos(2*t)-2*np.cos(3*t)-np.cos(4*t)
-    x=(x-x.min())/(x.max()-x.min())*12; yy=(yy-yy.min())/(yy.max()-yy.min())*10; x-= (x.max()+x.min())/2; yy-= (yy.max()+yy.min())/2
-    m=extrude_shape(LineString(np.c_[x,yy]).buffer(line_width/2,cap_style=1,join_style=1,resolution=48),height,'Heart'); m.apply_translation([0,y,0]); return m
+    t=np.linspace(0,2*np.pi,320); x=16*np.sin(t)**3; yy=13*np.cos(t)-5*np.cos(2*t)-2*np.cos(3*t)-np.cos(4*t); x=(x-x.min())/(x.max()-x.min())*12; yy=(yy-yy.min())/(yy.max()-yy.min())*10; x-=(x.max()+x.min())/2; yy-=(yy.max()+yy.min())/2; m=extrude_shape(LineString(np.c_[x,yy]).buffer(line_width/2,cap_style=1,join_style=1,resolution=48),height,'Heart'); m.apply_translation([0,y,0]); return m
+
+def crown_mesh(line_width,height,y=31,width=28.0,height_mm=15.0):
+    """Thin crown outline matching the requested reference: 3 round tips, zig-zag sides, single straight bottom."""
+    w=float(width); h=float(height_mm); pts=np.array([[-w/2,-h/2],[-w*.38,h*.28],[-w*.16,-h*.02],[0,h/2],[w*.16,-h*.02],[w*.38,h*.28],[w/2,-h/2],[-w/2,-h/2]],dtype=float)
+    parts=[LineString(pts).buffer(line_width/2,cap_style=1,join_style=1,resolution=48)]
+    r=max(1.2,line_width*2.8)
+    for x,yy in [(-w*.38,h*.28),(0,h/2),(w*.38,h*.28)]:
+        outer=LineString([(x-r,yy),(x+r,yy)]).buffer(r,cap_style=1,resolution=48); inner=LineString([(x-r*.45,yy),(x+r*.45,yy)]).buffer(r*.45,cap_style=1,resolution=48); parts.append(outer.difference(inner))
+    shape=unary_union(parts).buffer(0); m=extrude_shape(shape,height,'Crown'); m.apply_translation([0,y,0]); return m
 
 def preview(path,title,mode,mask=None,note=''):
-    img=Image.new('RGB',(1000,1000),(246,243,235))
-    d=ImageDraw.Draw(img)
-
+    img=Image.new('RGB',(1000,1000),(246,243,235)); d=ImageDraw.Draw(img)
     if mode=='stamp':
         d.ellipse((70,70,930,930),fill=(228,192,120),outline=(130,95,45),width=6)
-
-        # v1.6.1: stamp preview always shows the text/relief centered on the base,
-        # even when 3MF layout is SEPARATE.
         if mask is not None:
-            mi=Image.fromarray((mask.astype(np.uint8)*255),mode='L')
-            bb=mi.getbbox()
+            mi=Image.fromarray((mask.astype(np.uint8)*255),mode='L'); bb=mi.getbbox()
             if bb:
-                cr=mi.crop(bb)
-                cr.thumbnail((620,360),Image.Resampling.LANCZOS)
-                x=(1000-cr.width)//2
-                y=(1000-cr.height)//2 + 20
-                col=Image.new('RGB',cr.size,(80,55,22))
-                img.paste(col,(x,y),cr)
+                cr=mi.crop(bb); cr.thumbnail((620,360),Image.Resampling.LANCZOS); x=(1000-cr.width)//2; y=(1000-cr.height)//2+20; col=Image.new('RGB',cr.size,(80,55,22)); img.paste(col,(x,y),cr)
+    d.text((120,70),f'CakeStampBot v2.1.1 — {mode.upper()}',fill=(30,30,30)); d.text((120,910),note or title[:70],fill=(30,30,30)); img.save(path)
 
-    else:
-        # v1.6.1: topper preview is intentionally NOT rendered here.
-        # engine/topper_engine.py owns its preview and actual topper geometry.
-        pass
-
-    d.text((120,70),f'CakeStampBot v1.6.1 — {mode.upper()}',fill=(30,30,30))
-    d.text((120,910),note or title[:70],fill=(30,30,30))
-    img.save(path)
-
-
-
-def make_rounded_box_mesh(
-    name: str,
-    width: float,
-    depth: float,
-    height: float,
-    center_x: float,
-    center_y: float,
-    z0: float = 0.0,
-    radius: float = 2.2,
-):
-    """
-    Rounded rectangular prism built from a 2D rounded rectangle.
-    Used for topper legs/rails so they are not sharp boxy rectangles.
-    """
-    radius = max(0.1, min(radius, width / 2 - 0.05, depth / 2 - 0.05))
-    base = box(
-        center_x - width / 2 + radius,
-        center_y - depth / 2,
-        center_x + width / 2 - radius,
-        center_y + depth / 2,
-    )
-    side = box(
-        center_x - width / 2,
-        center_y - depth / 2 + radius,
-        center_x + width / 2,
-        center_y + depth / 2 - radius,
-    )
-    shape = unary_union([base, side]).buffer(radius, resolution=48, cap_style=1, join_style=1).buffer(0)
-    mesh = extrude_shape(shape, height, name)
-    mesh.apply_translation([0, 0, z0])
-    return mesh
-
+def make_rounded_box_mesh(name,width,depth,height,center_x,center_y,z0=0.0,radius=2.2):
+    radius=max(0.1,min(radius,width/2-0.05,depth/2-0.05)); base=box(center_x-width/2+radius,center_y-depth/2,center_x+width/2-radius,center_y+depth/2); side=box(center_x-width/2,center_y-depth/2+radius,center_x+width/2,center_y+depth/2-radius); shape=unary_union([base,side]).buffer(radius,resolution=48,cap_style=1,join_style=1).buffer(0); mesh=extrude_shape(shape,height,name); mesh.apply_translation([0,0,z0]); return mesh
 
 def export_bundle(output,name,scene,preview_png,stls,meta,suffix):
-    """
-    v1.6.1:
-    ZIP export removed. Bot sends only PNG preview and 3MF.
-    STL files may still be written internally for debugging/export, but no ZIP is created.
-    """
-    output=Path(output)
-    project=str(output/f'{name}_{suffix}.3mf')
-    scene.export(project)
-
-    meta_path=str(output/f'{name}_project.json')
-    Path(meta_path).write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
-
-    # Keep ModelResult shape compatible; empty bundle means "do not send zip".
-    return ModelResult(project,preview_png,'',str(output))
+    output=Path(output); project=str(output/f'{name}_{suffix}.3mf'); scene.export(project); meta_path=str(output/f'{name}_project.json'); Path(meta_path).write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8'); return ModelResult(project,preview_png,'',str(output))
