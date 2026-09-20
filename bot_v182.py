@@ -1,11 +1,11 @@
-"""CakeStampBot v2.2.2 — compact stamp UI with explicit source routing."""
+"""CakeStampBot v2.2.3 — compact stamp UI; source selection uses reliable reply buttons."""
 import json, os
 from pathlib import Path
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 import bot_legacy as legacy
 
-VERSION="2.2.2"
+VERSION="2.2.3"
 ACCESS_FILE=Path(os.getenv("DATA_DIR","data"))/"allowed_users.json"
 ACCESS_FILE.parent.mkdir(parents=True,exist_ok=True)
 
@@ -38,7 +38,7 @@ def defaults(c):
  if float(d.get("text_size_mm",12))<10:d["text_size_mm"]=12.0
  d.setdefault("base_shape","round");d.setdefault("crown_position","top");d.setdefault("add_crown",False);d.setdefault("add_heart",False);d.setdefault("layout_mode","separate")
 def source_kb():
- return InlineKeyboardMarkup([[InlineKeyboardButton("✍️ Текст",callback_data="source:text")],[InlineKeyboardButton("🖼 Картинка / логотип",callback_data="source:image")]])
+ return ReplyKeyboardMarkup([["✍️ Текст","🖼 Картинка / логотип"],["↩️ Главное меню"]],resize_keyboard=True,one_time_keyboard=False)
 
 def panel_text(c):
  defaults(c);d=c.user_data;p={"normal":"Обычный","top":"Сверху","bottom":"Снизу","full":"По окружности"}.get(d.get("text_path"),"Обычный");e=[]
@@ -69,8 +69,8 @@ legacy.stamp_settings_text=panel_text;legacy.stamp_quick_keyboard=panel_kb;legac
 
 async def start(u,c):c.user_data.clear();await u.message.reply_text(f"CakeStampBot v{VERSION}\n\nВыбери действие в меню ниже 👇",reply_markup=legacy.main_menu_keyboard())
 async def stamp_cmd(u,c):
- c.user_data.clear();c.user_data["mode"]="stamp";c.user_data["step"]="source"
- await u.effective_message.reply_text("Режим: 🍰 Штамп. Выбери источник:",reply_markup=source_kb())
+ c.user_data.clear();c.user_data.update(mode="stamp",step="source")
+ await u.effective_message.reply_text("Режим: 🍰 Штамп. Выбери источник кнопкой ниже:",reply_markup=source_kb())
 async def help_cmd(u,c):await u.message.reply_text(f"CakeStampBot v{VERSION}\n\n🍰 Штамп — компактная панель настроек.\n👑 Корона и ❤️ сердце.\n🎂 Топпер без изменений.",reply_markup=legacy.main_menu_keyboard())
 
 async def callback(u,c):
@@ -95,11 +95,13 @@ async def callback(u,c):
 async def text_router(u,c):
  text=(u.message.text or "").strip()
  if text=="🍰 Штамп":return await stamp_cmd(u,c)
- # Fallback for old ReplyKeyboard/source buttons: make them work too.
+ if text=="↩️ Главное меню":c.user_data.clear();return await u.message.reply_text("Главное меню:",reply_markup=legacy.main_menu_keyboard())
  if text in ("✍️ Текст","Текст") and c.user_data.get("mode")=="stamp":
-  c.user_data.update(source="text",step="text");return await u.message.reply_text("✍️ Напиши текст штампа одним сообщением.")
+  c.user_data.update(source="text",step="text")
+  return await u.message.reply_text("✍️ Напиши текст штампа одним сообщением.",reply_markup=ReplyKeyboardRemove())
  if text in ("🖼 Картинка / логотип","Картинка / логотип") and c.user_data.get("mode")=="stamp":
-  c.user_data.update(source="image",step="photo");return await u.message.reply_text("🖼 Пришли картинку или логотип.")
+  c.user_data.update(source="image",step="photo")
+  return await u.message.reply_text("🖼 Пришли картинку или логотип.",reply_markup=ReplyKeyboardRemove())
  return await legacy.on_text(u,c)
 
 async def users_cmd(u,c):
@@ -120,5 +122,5 @@ async def post_init(app):
  await legacy.post_init(app);await app.bot.set_my_commands([("start","Главное меню"),("stamp","Штамп"),("topper","Топпер"),("queue","Очередь"),("help","Помощь")]);legacy.logger.info("CakeStampBot v%s UI started",VERSION)
 def main():
  app=Application.builder().token(legacy.BOT_TOKEN).post_init(post_init).post_shutdown(legacy.post_shutdown).build()
- app.add_handler(CommandHandler("start",guarded(start)));app.add_handler(CommandHandler("help",guarded(help_cmd)));app.add_handler(CommandHandler("stamp",guarded(stamp_cmd)));app.add_handler(CommandHandler("topper",guarded(legacy.topper_cmd)));app.add_handler(CommandHandler("queue",guarded(legacy.queue_cmd)));app.add_handler(CommandHandler("users",users_cmd));app.add_handler(CommandHandler("adduser",adduser));app.add_handler(CommandHandler("deluser",deluser));app.add_handler(CallbackQueryHandler(guarded(callback)));app.add_handler(MessageHandler(filters.PHOTO,guarded(legacy.on_photo)));app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,guarded(text_router)));app.add_error_handler(legacy.error_handler);app.run_polling()
+ app.add_handler(CommandHandler("start",guarded(start)));app.add_handler(CommandHandler("help",guarded(help_cmd)));app.add_handler(CommandHandler("stamp",guarded(stamp_cmd)));app.add_handler(CommandHandler("topper",guarded(legacy.topper_cmd)));app.add_handler(CommandHandler("queue",guarded(legacy.queue_cmd)));app.add_handler(CommandHandler("users",users_cmd));app.add_handler(CommandHandler("adduser",adduser));app.add_handler(CommandHandler("deluser",deluser));app.add_handler(CallbackQueryHandler(guarded(callback)));app.add_handler(MessageHandler(filters.PHOTO,guarded(legacy.on_photo)));app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,guarded(text_router)));app.add_error_handler(legacy.error_handler);app.run_polling(drop_pending_updates=True)
 if __name__=="__main__":main()
