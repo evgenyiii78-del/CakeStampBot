@@ -1,4 +1,4 @@
-"""Bothost entrypoint for CakeStampBot v2.3.0.
+"""Bothost entrypoint for CakeStampBot v2.3.5.
 
 Bothost starts `python bot.py`; the active application lives in bot_v182.py.
 """
