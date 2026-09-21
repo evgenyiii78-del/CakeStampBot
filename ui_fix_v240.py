@@ -36,7 +36,7 @@ def apply_fixes(app):
             "❤️ Сердце", "👑 Корона", "✨ Без дополнений",
             "📏 60 мм", "📏 105 мм", "📏 145 мм",
             "⭕ Круг", "▭ Прямоугольник",
-            "🔤 Classic", "🔤 Comic", "🔤 GOST",
+            "🔤 Classic", "✍️ Рукописный", "🔤 Comic", "🔤 GOST",
             "↕️ 10 мм", "↕️ 12 мм", "↕️ 14 мм", "↕️ 16 мм",
             "↔️ Обычный", "⬆️ Сверху", "⬇️ Снизу", "⭕ По окружности",
             "🧩 Отдельно", "🔗 Собрать",
@@ -49,8 +49,7 @@ def apply_fixes(app):
 
     app.text_router = compact_text_router
 
-    # v2.4.0 worker: the old 210 s ceiling could discard a valid long Comic job.
-    # The engine itself is now much faster, but leave enough headroom for a slow host.
+    # v2.4.0 worker: leave enough headroom for a slow host and complex TTF jobs.
     legacy = app.legacy
 
     async def cake_worker_v240(application):
