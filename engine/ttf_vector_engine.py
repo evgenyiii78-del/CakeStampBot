@@ -30,7 +30,7 @@ class FlattenPen(BasePen):
         p0=self.last
         for i in range(1,self.steps+1):
             t=i/self.steps;u=1-t
-            self.cur.append((u**3*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t**3*p3[0],u**3*p0[1]+3*u*u*t*p1[1]+t**3*p3[1]))
+            self.cur.append((u**3*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t**3*p3[0],u**3*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t**3*p3[1]))
         self.last=tuple(p3)
     def _closePath(self): self._finish()
     def _endPath(self): self._finish()
