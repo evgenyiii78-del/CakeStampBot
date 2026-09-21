@@ -1,7 +1,8 @@
-"""CakeStampBot v2.4.4 UI/runtime patch for selectable single-line TTF stamps.
+"""CakeStampBot v2.4.6 UI/runtime patch for selectable single-line TTF stamps.
 
-The old Comic option is now shown as a handwritten Bad Script option while the
-internal `comic` key remains supported for existing sessions/jobs.
+The old Comic option is shown as a handwritten font while the internal `comic`
+key remains supported for existing sessions/jobs. Stamp disk sizes include
+60, 105, 130 and 145 mm.
 """
 from telegram import ReplyKeyboardMarkup
 
@@ -10,6 +11,13 @@ _WIDTHS = {
     "✏️ 0.40 мм": 0.40,
     "✏️ 0.45 мм": 0.45,
     "✏️ 0.60 мм": 0.60,
+}
+
+_SIZES = {
+    "📏 60 мм": "60",
+    "📏 105 мм": "105",
+    "📏 130 мм": "130",
+    "📏 145 мм": "145",
 }
 
 
@@ -48,7 +56,7 @@ def apply_fixes(app):
         return ReplyKeyboardMarkup(
             [
                 ["❤️ Сердце", "👑 Корона", "✨ Без дополнений"],
-                ["📏 60 мм", "📏 105 мм", "📏 145 мм"],
+                ["📏 60 мм", "📏 105 мм", "📏 130 мм", "📏 145 мм"],
                 ["⭕ Круг", "▭ Прямоугольник"],
                 ["🔤 Classic", "✍️ Рукописный", "🔤 GOST"],
                 ["✏️ 0.35 мм", "✏️ 0.40 мм", "✏️ 0.45 мм", "✏️ 0.60 мм"],
@@ -83,6 +91,20 @@ def apply_fixes(app):
 
     async def text_router_v244(u, c):
         text = (u.message.text or "").strip() if u.message else ""
+
+        if c.user_data.get("mode") == "stamp" and text in _SIZES:
+            defaults_v244(c)
+            size = _SIZES[text]
+            c.user_data["base_size"] = size
+            c.user_data["stamp_size"] = size
+            c.user_data["step"] = "settings"
+            try:
+                return await app.show(u.message, c)
+            finally:
+                try:
+                    await u.message.delete()
+                except Exception:
+                    pass
 
         if c.user_data.get("mode") == "stamp" and text in {"✍️ Рукописный", "🔤 Comic"}:
             defaults_v244(c)
