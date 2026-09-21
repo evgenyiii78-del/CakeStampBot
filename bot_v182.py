@@ -1,10 +1,10 @@
-"""CakeStampBot v2.3.4 — ReplyKeyboard stamp UI with explicit 3MF layout."""
+"""CakeStampBot v2.3.5 — ReplyKeyboard stamp UI with explicit 3MF layout."""
 import json, os, uuid
 from pathlib import Path
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 import bot_legacy as legacy
-VERSION="2.3.4"
+VERSION="2.3.5"
 ACCESS_FILE=Path(os.getenv("DATA_DIR","data"))/"allowed_users.json";ACCESS_FILE.parent.mkdir(parents=True,exist_ok=True)
 def _ids(name):
  out=set()
