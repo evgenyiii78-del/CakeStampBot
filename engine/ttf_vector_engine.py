@@ -42,29 +42,43 @@ class FlattenPen(BasePen):
 
 def resolve_font(choice,folder):
     c=(choice or "classic").lower()
-    # First honour explicit deployment font paths. This allows an actual
-    # Comic Sans MS TTF to be mounted later without changing the engine.
+
+    # Deployment paths have highest priority.
     env_name={"classic":"CAKESTAMP_FONT_CLASSIC","comic":"CAKESTAMP_FONT_COMIC","gost":"CAKESTAMP_FONT_GOST"}.get(c)
     if env_name:
         p=Path(os.getenv(env_name,"").strip())
         if str(p) not in ("", ".") and p.is_file(): return p
-    fs=list(Path(folder).glob("*.ttf"))+list(Path(folder).glob("*.otf"))
-    # Also inspect common Linux font locations installed by Docker.
+
+    font_dir=Path(folder)
+    bundled={
+      "classic":font_dir/"DejaVuSerif.ttf",
+      "comic":font_dir/"Comic Sans MS.ttf",
+      "gost":font_dir/"GOST-type-AU.ttf",
+    }
+    p=bundled.get(c)
+    if p is not None and p.is_file(): return p
+
+    fs=list(font_dir.glob("*.ttf"))+list(font_dir.glob("*.otf"))
     for root in (Path("/usr/share/fonts/truetype"),Path("/usr/local/share/fonts")):
         if root.exists():
             fs += list(root.rglob("*.ttf"))+list(root.rglob("*.otf"))
     if not fs: raise FileNotFoundError("no TTF/OTF fonts available")
+
     d={p.name.lower():p for p in fs}
     prefs={
       "classic":["dejavuserif.ttf","dejavusans.ttf"],
-      "comic":["comic_sans_ms.ttf","comic sans ms.ttf","comicsansms.ttf","comic.ttf","comic_sans.ttf","comicsans.ttf","comicneue-regular.ttf","comicneue_regular.ttf","comicneue.ttf"],
+      "comic":["comic sans ms.ttf","comic_sans_ms.ttf","comicsansms.ttf","comic.ttf","comic_sans.ttf","comicsans.ttf"],
       "gost":["gost-type-au.ttf","gost.ttf","dejavusans.ttf"]}
     for n in prefs.get(c,prefs["classic"]):
         if n in d:return d[n]
-    tokens={"comic":("comic","neue"),"gost":("gost",),"classic":("serif",)}.get(c,())
+
+    tokens={"comic":("comic",),"gost":("gost",),"classic":("serif",)}.get(c,())
     for p in fs:
         low=p.name.lower()
         if any(t in low for t in tokens):return p
+
+    if c=="comic":
+        raise FileNotFoundError("Comic Sans MS font not found. Expected fonts/Comic Sans MS.ttf or CAKESTAMP_FONT_COMIC.")
     return d.get("dejavusans.ttf",fs[0])
 
 def glyph_geom(gs,name,steps):
