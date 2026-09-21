@@ -30,7 +30,7 @@ class FlattenPen(BasePen):
         p0=self.last
         for i in range(1,self.steps+1):
             t=i/self.steps;u=1-t
-            self.cur.append((u**3*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t**3*p3[0],u**3*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t**3*p3[1]))
+            self.cur.append((u**3*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t**3*p3[0],u**3*p0[1]+3*u*u*t*p1[1]+t**3*p3[1]))
         self.last=tuple(p3)
     def _closePath(self): self._finish()
     def _endPath(self): self._finish()
@@ -42,16 +42,21 @@ class FlattenPen(BasePen):
 
 def resolve_font(choice,folder):
     c=(choice or "classic").lower()
+    # Compatibility: old sessions store "comic"; new UI calls it handwritten.
+    if c=="hand": c="comic"
 
-    env_name={"classic":"CAKESTAMP_FONT_CLASSIC","comic":"CAKESTAMP_FONT_COMIC","gost":"CAKESTAMP_FONT_GOST"}.get(c)
+    env_name={"classic":"CAKESTAMP_FONT_CLASSIC","comic":"CAKESTAMP_FONT_HAND","gost":"CAKESTAMP_FONT_GOST"}.get(c)
     if env_name:
-        p=Path(os.getenv(env_name,"").strip())
+        raw=os.getenv(env_name,"").strip()
+        if not raw and c=="comic":
+            raw=os.getenv("CAKESTAMP_FONT_COMIC","").strip()
+        p=Path(raw)
         if str(p) not in ("", ".") and p.is_file(): return p
 
     font_dir=Path(folder)
     bundled={
       "classic":font_dir/"DejaVuSerif.ttf",
-      "comic":font_dir/"Comic Sans MS.ttf",
+      "comic":font_dir/"Bad Script.ttf",
       "gost":font_dir/"GOST type A.ttf",
     }
     p=bundled.get(c)
@@ -66,13 +71,13 @@ def resolve_font(choice,folder):
     d={p.name.lower():p for p in fs}
     prefs={
       "classic":["dejavuserif.ttf","dejavusans.ttf"],
-      "comic":["comic sans ms.ttf"],
+      "comic":["bad script.ttf","badscript-regular.ttf","badscript.ttf"],
       "gost":["gost type a.ttf"]}
     for n in prefs.get(c,prefs["classic"]):
         if n in d:return d[n]
 
     if c=="comic":
-        raise FileNotFoundError("Comic Sans MS font not found. Expected fonts/Comic Sans MS.ttf or CAKESTAMP_FONT_COMIC.")
+        raise FileNotFoundError("Bad Script font not found. Expected fonts/Bad Script.ttf or CAKESTAMP_FONT_HAND.")
     if c=="gost":
         raise FileNotFoundError("GOST Type A font not found. Expected fonts/GOST type A.ttf or CAKESTAMP_FONT_GOST.")
     return d.get("dejavuserif.ttf") or d.get("dejavusans.ttf") or fs[0]
