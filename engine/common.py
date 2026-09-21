@@ -19,13 +19,27 @@ def find_font_path(font_choice='classic'):
     env={'classic':'CAKESTAMP_FONT_CLASSIC','comic':'CAKESTAMP_FONT_COMIC','gost':'CAKESTAMP_FONT_GOST'}
     p=os.getenv(env.get(choice,'CAKESTAMP_FONT_CLASSIC')) or os.getenv('CAKESTAMP_FONT')
     if p and os.path.exists(p): return p
-    bundled={'classic':['fonts/Classic.ttf','/app/fonts/Classic.ttf'], 'comic':['fonts/Comic.ttf','/app/fonts/Comic.ttf'], 'gost':['fonts/GOST.ttf','/app/fonts/GOST.ttf','fonts/GOST-type-AU.ttf','/app/fonts/GOST-type-AU.ttf']}
-    for p in bundled.get(choice,[])+bundled['classic']:
+    bundled={
+        'classic':['fonts/DejaVuSerif.ttf','/usr/src/app/fonts/DejaVuSerif.ttf','/app/fonts/DejaVuSerif.ttf'],
+        'comic':['fonts/Comic Sans MS.ttf','/usr/src/app/fonts/Comic Sans MS.ttf','/app/fonts/Comic Sans MS.ttf'],
+        'gost':['fonts/GOST type A.ttf','/usr/src/app/fonts/GOST type A.ttf','/app/fonts/GOST type A.ttf']
+    }
+    for p in bundled.get(choice,[]):
         if os.path.exists(p): return p
-    candidates={'classic':['/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',r'C:\Windows\Fonts\times.ttf',r'C:\Windows\Fonts\arial.ttf'],'comic':[r'C:\Windows\Fonts\comic.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'],'gost':[r'C:\Windows\Fonts\GOST type AU.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']}
-    for p in candidates.get(choice,[])+candidates['classic']:
+    candidates={
+        'classic':['/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',r'C:\Windows\Fonts\times.ttf',r'C:\Windows\Fonts\arial.ttf'],
+        'comic':[r'C:\Windows\Fonts\comic.ttf'],
+        'gost':[r'C:\Windows\Fonts\GOST type A.ttf']
+    }
+    for p in candidates.get(choice,[]):
         if os.path.exists(p): return p
-    for base in ['/usr/share/fonts','/usr/local/share/fonts','/app/fonts']:
+    if choice=='comic':
+        raise FileNotFoundError('Не найден Comic Sans MS. Ожидается fonts/Comic Sans MS.ttf или CAKESTAMP_FONT_COMIC.')
+    if choice=='gost':
+        raise FileNotFoundError('Не найден GOST Type A. Ожидается fonts/GOST type A.ttf или CAKESTAMP_FONT_GOST.')
+    for p in bundled['classic']+candidates['classic']:
+        if os.path.exists(p): return p
+    for base in ['/usr/share/fonts','/usr/local/share/fonts','/usr/src/app/fonts','/app/fonts']:
         if os.path.isdir(base):
             for root,_,files in os.walk(base):
                 for fn in files:
