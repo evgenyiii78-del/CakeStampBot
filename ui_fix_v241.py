@@ -53,11 +53,14 @@ def apply_fixes(app):
         defaults_v241(c)
         text = original_panel(c)
         d = c.user_data
+        width = float(d.get("line_width", 0.45))
         choice = str(d.get("font_choice", "classic")).lower()
-        if choice in {"comic", "gost"}:
+        if d.get("source") == "image":
+            line = f"✏️ Линия изображения: {width:.2f} мм"
+        elif choice in {"comic", "gost"}:
             line = "✏️ Геометрия: оригинальный TTF (нативная толщина шрифта)"
         else:
-            line = f"✏️ Линия: {float(d.get('line_width', 0.45)):.2f} мм"
+            line = f"✏️ Линия: {width:.2f} мм"
         return text.replace("✏️ Линия: 0.25 мм", line)
 
     app.panel_text = panel_text_v241
@@ -81,26 +84,41 @@ def apply_fixes(app):
 
     app.text_router = text_router_v241
 
-    # v2.4.0 build_model hardcoded line_width=.25. Replace only text-stamp dispatch;
-    # topper and image stamp continue through the proven original function.
+    # v2.4.0 build_model hardcoded line_width=.25. Replace stamp dispatch so
+    # the selected width reaches Classic text and image centerline generation.
+    # Comic/GOST text use their native filled TTF outlines instead.
     original_build_model = legacy.build_model
 
     def build_model_v241(p):
-        if p.get("mode") == "stamp" and p.get("source", "text") != "image":
-            out = legacy.OUTPUT_DIR / legacy.uuid.uuid4().hex[:10]
-            return legacy.build_stamp_from_text(
-                text=p["text"],
+        if p.get("mode") != "stamp":
+            return original_build_model(p)
+
+        out = legacy.OUTPUT_DIR / legacy.uuid.uuid4().hex[:10]
+        width = float(p.get("line_width", 0.45))
+
+        if p.get("source", "text") == "image":
+            return legacy.build_stamp_from_image(
+                image_path=p["image_path"],
                 output_dir=str(out),
                 base_size=p.get("base_size", "105"),
                 base_shape=p.get("base_shape", "round"),
-                line_width=float(p.get("line_width", 0.45)),
-                font_choice=p.get("font_choice", "classic"),
-                text_path=p.get("text_path", "normal"),
-                text_size_mm=float(p.get("text_size_mm", 12)),
+                line_width=width,
                 add_heart=bool(p.get("add_heart", False)),
-                add_crown=bool(p.get("add_crown", False)),
                 layout_mode=p.get("layout_mode", "assembled"),
             )
-        return original_build_model(p)
+
+        return legacy.build_stamp_from_text(
+            text=p["text"],
+            output_dir=str(out),
+            base_size=p.get("base_size", "105"),
+            base_shape=p.get("base_shape", "round"),
+            line_width=width,
+            font_choice=p.get("font_choice", "classic"),
+            text_path=p.get("text_path", "normal"),
+            text_size_mm=float(p.get("text_size_mm", 12)),
+            add_heart=bool(p.get("add_heart", False)),
+            add_crown=bool(p.get("add_crown", False)),
+            layout_mode=p.get("layout_mode", "assembled"),
+        )
 
     legacy.build_model = build_model_v241
