@@ -1,8 +1,6 @@
-"""CakeStampBot v2.4.0 compact ReplyKeyboard UI fixes.
-
-Keeps only the current stamp settings panel and removes transient ReplyKeyboard
-selection messages so font/size/path choices do not fill the Telegram chat.
-"""
+"""CakeStampBot v2.4.0 runtime/UI fixes."""
+import asyncio
+from pathlib import Path
 
 
 async def _delete_message(message):
@@ -32,19 +30,17 @@ def apply_fixes(app):
     async def compact_text_router(u, c):
         text = (u.message.text or "").strip() if u.message else ""
         d = c.user_data
-        # These are transient ReplyKeyboard selections. The resulting current
-        # settings panel is enough feedback, so remove the user's button message.
-        clean = d.get("mode") == "stamp" and (
-            text in {
-                "❤️ Сердце", "👑 Корона", "✨ Без дополнений",
-                "📏 60 мм", "📏 105 мм", "📏 145 мм",
-                "⭕ Круг", "▭ Прямоугольник",
-                "🔤 Classic", "🔤 Comic", "🔤 GOST",
-                "↕️ 10 мм", "↕️ 12 мм", "↕️ 14 мм", "↕️ 16 мм",
-                "↔️ Обычный", "⬆️ Сверху", "⬇️ Снизу", "⭕ По окружности",
-                "🧩 Отдельно", "🔗 Собрать",
-            }
-        )
+        # ReplyKeyboard sends every tap as a normal chat message. Remove transient
+        # settings taps after the updated panel has been shown.
+        clean = d.get("mode") == "stamp" and text in {
+            "❤️ Сердце", "👑 Корона", "✨ Без дополнений",
+            "📏 60 мм", "📏 105 мм", "📏 145 мм",
+            "⭕ Круг", "▭ Прямоугольник",
+            "🔤 Classic", "🔤 Comic", "🔤 GOST",
+            "↕️ 10 мм", "↕️ 12 мм", "↕️ 14 мм", "↕️ 16 мм",
+            "↔️ Обычный", "⬆️ Сверху", "⬇️ Снизу", "⭕ По окружности",
+            "🧩 Отдельно", "🔗 Собрать",
+        }
         try:
             return await original_text_router(u, c)
         finally:
@@ -52,3 +48,53 @@ def apply_fixes(app):
                 await _delete_message(u.message)
 
     app.text_router = compact_text_router
+
+    # v2.4.0 worker: the old 210 s ceiling could discard a valid long Comic job.
+    # The engine itself is now much faster, but leave enough headroom for a slow host.
+    legacy = app.legacy
+
+    async def cake_worker_v240(application):
+        qq = application.bot_data["cake_queue"]
+        while True:
+            job = await qq.get()
+            try:
+                await application.bot.send_message(
+                    chat_id=job.chat_id,
+                    text="🔧 Начал обработку модели…\nОптимизированная векторная обработка может занять до нескольких минут.",
+                )
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(legacy.build_model, job.params),
+                    timeout=420,
+                )
+                with open(result.preview_png, "rb") as f:
+                    await application.bot.send_photo(
+                        chat_id=job.chat_id,
+                        photo=f,
+                        caption="Превью проекта.",
+                    )
+                with open(result.project_3mf, "rb") as f:
+                    await application.bot.send_document(
+                        chat_id=job.chat_id,
+                        document=f,
+                        filename=Path(result.project_3mf).name,
+                        caption="Готово ✅ Это 3MF-проект.",
+                        reply_markup=legacy.main_menu_keyboard(),
+                    )
+            except asyncio.TimeoutError:
+                legacy.logger.exception("CakeStampBot v2.4.0 model worker timeout")
+                await application.bot.send_message(
+                    chat_id=job.chat_id,
+                    text="Не получилось собрать модель: превышено время обработки (420 секунд).",
+                    reply_markup=legacy.main_menu_keyboard(),
+                )
+            except Exception as exc:
+                legacy.logger.exception("CakeStampBot v2.4.0 model build failed")
+                await application.bot.send_message(
+                    chat_id=job.chat_id,
+                    text=f"Не получилось собрать модель.\n\nОшибка: {exc}",
+                    reply_markup=legacy.main_menu_keyboard(),
+                )
+            finally:
+                qq.task_done()
+
+    legacy.cake_worker = cake_worker_v240
