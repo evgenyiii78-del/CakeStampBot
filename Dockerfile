@@ -14,7 +14,7 @@ RUN apt-get update \
     && blender --version | head -n 1
 
 ENV CAKESTAMP_FONT_CLASSIC=/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf
-ENV CAKESTAMP_FONT_COMIC=/usr/share/fonts/truetype/comic-neue/ComicNeue-Regular.ttf
+ENV CAKESTAMP_FONT_COMIC=/usr/share/fonts/truetype/comic-neue/ComicNeue-Bold.ttf
 ENV CAKESTAMP_FONT_GOST=/usr/src/app/fonts/GOST-type-AU.ttf
 ENV DATA_DIR=/app/data
 ENV STAMP_TEXT_ENGINE=auto
