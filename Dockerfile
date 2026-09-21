@@ -22,6 +22,10 @@ ENV BLENDER_BIN=/usr/bin/blender
 ENV PYTHONUNBUFFERED=1
 
 COPY requirements.txt ./requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir -r requirements.txt \
+    && python -c "import telegram; print('python-telegram-bot:', telegram.__version__)"
+
 COPY . .
 
 RUN mkdir -p /app/data/uploads /app/data/outputs && chmod -R 777 /app/data
