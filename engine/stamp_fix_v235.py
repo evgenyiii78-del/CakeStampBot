@@ -1,9 +1,9 @@
-"""CakeStampBot v2.3.9 stamp-only local engine fixes. Topper untouched."""
+"""CakeStampBot v2.4.0 stamp-only local engine fixes. Topper untouched."""
 from __future__ import annotations
 import math
 import numpy as np
 from shapely import affinity
-from shapely.geometry import LineString, MultiLineString, GeometryCollection, Point
+from shapely.geometry import LineString, MultiLineString, Point
 from shapely.ops import unary_union
 
 
@@ -15,8 +15,7 @@ def _shortened_segment(a,b,trim_a=0.0,trim_b=0.0):
 def _points(width,height,yoff=0.0):
     """Geometry matched to the supplied reference crown.
 
-    Important visual feature: the lower corners sit INSIDE the two outer jewels.
-    The old crown did the opposite, which is why it looked wide/trapezoidal.
+    Lower corners sit inside the two outer jewels, matching the approved reference.
     """
     w=float(width); h=float(height); y=float(yoff)
     return {
@@ -30,7 +29,7 @@ def _points(width,height,yoff=0.0):
     }
 
 
-def crown_geometry(width=30.0,height_mm=15.0,line_width=.45):
+def crown_geometry(width=34.0,height_mm=17.0,line_width=.45):
     w=float(width); h=float(height_mm); lw=max(.40,float(line_width)); r=max(1.18,w*.043)
     p=_points(w,h); BL,L,VL,C,VR,R,BR=(p[k] for k in ("BL","L","VL","C","VR","R","BR")); trim=max(0.0,r-lw*.48)
     segs=[
@@ -41,7 +40,6 @@ def crown_geometry(width=30.0,height_mm=15.0,line_width=.45):
         _shortened_segment(VR,R,0,trim),
         _shortened_segment(R,BR,trim,0),
     ]
-    # Reference base is shallow and almost horizontal.
     xs=np.linspace(BL[0],BR[0],180)
     ys=BL[1]+.12*(1-(xs/(w*.285))**2)
     segs.append(LineString(np.c_[xs,ys]))
@@ -54,7 +52,8 @@ def crown_geometry(width=30.0,height_mm=15.0,line_width=.45):
 
 
 def crown_preview_paths(nominal,base_shape):
-    w=min(30.0,float(nominal)*.31); h=w*.50; y=float(nominal)*(.315 if base_shape!="rect" else .25); lw=.45; r=max(1.18,w*.043)
+    # v2.4.0: about 13% larger than the approved v2.3.9 crown.
+    w=min(34.0,float(nominal)*.35); h=w*.50; y=float(nominal)*(.315 if base_shape!="rect" else .25); lw=.45; r=max(1.18,w*.043)
     p=_points(w,h,y); BL,L,VL,C,VR,R,BR=(p[k] for k in ("BL","L","VL","C","VR","R","BR")); trim=max(0.0,r-lw*.48); paths=[]
     for a,b,ta,tb in ((BL,L,0,trim),(L,VL,trim,0),(VL,C,0,trim),(C,VR,trim,0),(VR,R,0,trim),(R,BR,trim,0)):
         paths.append(list(_shortened_segment(a,b,ta,tb).coords))
@@ -81,19 +80,30 @@ def apply_fixes(engine):
 
     original_mesh=engine._crown_mesh
     def crown_mesh(line_width,height,y,width=30.0,height_mm=15.0):
-        return original_mesh(max(.45,line_width),height,y,width=width,height_mm=float(width)*.50)
+        # build_stamp_from_text_blender still passes the old 30 mm cap; enlarge it here
+        # so preview and exported 3MF use the same v2.4.0 crown scale.
+        effective_width=min(34.0,float(width)*1.1333333333)
+        return original_mesh(max(.45,line_width),height,y,width=effective_width,height_mm=effective_width*.50)
     engine._crown_mesh=crown_mesh
 
-    # v2.3.9: DO NOT use the old cubic smoother/pruner for TTF stamp text.
-    # The cubic routine trims every LineString end. Skeleton junctions are represented
-    # by several LineStrings meeting at one point, so trimming those ends creates the
-    # visible breaks in я/а/ц. Pruning then makes the breaks larger.
-    # Build the centerline locally and use endpoint-preserving Chaikin smoothing only.
+    # The old 0.025 mm path sampling creates enormous Blender meshes/ASCII STL files.
+    # 0.08 mm is still far below the 0.25 mm stamp line width, but cuts point count
+    # by roughly 3x and prevents the worker timeout on long 16 mm Comic text.
+    original_resample=engine._resample_path
+    def resample_fast(line,step=None):
+        return original_resample(line,step=.08)
+    engine._resample_path=resample_fast
+
+    # Junction-safe TTF centerline. Do not trim LineString endpoints: skeleton junctions
+    # are represented by multiple LineStrings meeting at those endpoints.
     def outline_clean(outline_shape,ppm=None):
         if outline_shape is None or outline_shape.is_empty:
             raise RuntimeError("Пустая TTF-геометрия.")
         minx,miny,maxx,maxy=outline_shape.bounds
-        pad=2.0; px=int(max(76,min(104,84 if ppm is None else int(ppm))))
+        pad=2.0
+        # v2.4.0: 84 px/mm was needlessly expensive for a physical 0.25 mm stroke.
+        # 52 px/mm gives ~13 raster pixels across that stroke and is substantially faster.
+        px=int(max(48,min(64,52 if ppm is None else int(ppm))))
         W=max(128,int(round((maxx-minx+2*pad)*px))); H=max(128,int(round((maxy-miny+2*pad)*px)))
         mask=engine.Image.new("L",(W,H),0); d=engine.ImageDraw.Draw(mask)
         def xy(x,y): return ((x-minx+pad)*px,(maxy-y+pad)*px)
@@ -105,15 +115,12 @@ def apply_fixes(engine):
         if c is None or c.is_empty: raise RuntimeError("Не удалось получить centerline.")
         x0,y0,x1,y1=c.bounds
         c=affinity.translate(c,xoff=-(x0+x1)/2,yoff=-(y0+y1)/2)
-        # Chaikin implementation in stamp_engine explicitly preserves first/last point.
-        # That keeps all glyph junctions connected.
         parts=[]
         for ln in _line_parts(c):
             if ln.length < .055: continue
             sm=engine._se._smooth_line(ln,refinements=3,simplify_mm=.012)
             if sm is not None and not sm.is_empty: parts.append(sm)
         if not parts: raise RuntimeError("Centerline текста пуст после очистки.")
-        # Snap tiny raster discrepancies back together, but never trim endpoints.
         return unary_union(parts)
     engine._outline_to_centerline=outline_clean
 
