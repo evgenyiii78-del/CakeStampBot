@@ -43,7 +43,6 @@ class FlattenPen(BasePen):
 def resolve_font(choice,folder):
     c=(choice or "classic").lower()
 
-    # Deployment paths have highest priority.
     env_name={"classic":"CAKESTAMP_FONT_CLASSIC","comic":"CAKESTAMP_FONT_COMIC","gost":"CAKESTAMP_FONT_GOST"}.get(c)
     if env_name:
         p=Path(os.getenv(env_name,"").strip())
@@ -53,7 +52,7 @@ def resolve_font(choice,folder):
     bundled={
       "classic":font_dir/"DejaVuSerif.ttf",
       "comic":font_dir/"Comic Sans MS.ttf",
-      "gost":font_dir/"GOST-type-AU.ttf",
+      "gost":font_dir/"GOST type A.ttf",
     }
     p=bundled.get(c)
     if p is not None and p.is_file(): return p
@@ -67,19 +66,16 @@ def resolve_font(choice,folder):
     d={p.name.lower():p for p in fs}
     prefs={
       "classic":["dejavuserif.ttf","dejavusans.ttf"],
-      "comic":["comic sans ms.ttf","comic_sans_ms.ttf","comicsansms.ttf","comic.ttf","comic_sans.ttf","comicsans.ttf"],
-      "gost":["gost-type-au.ttf","gost.ttf","dejavusans.ttf"]}
+      "comic":["comic sans ms.ttf"],
+      "gost":["gost type a.ttf"]}
     for n in prefs.get(c,prefs["classic"]):
         if n in d:return d[n]
 
-    tokens={"comic":("comic",),"gost":("gost",),"classic":("serif",)}.get(c,())
-    for p in fs:
-        low=p.name.lower()
-        if any(t in low for t in tokens):return p
-
     if c=="comic":
         raise FileNotFoundError("Comic Sans MS font not found. Expected fonts/Comic Sans MS.ttf or CAKESTAMP_FONT_COMIC.")
-    return d.get("dejavusans.ttf",fs[0])
+    if c=="gost":
+        raise FileNotFoundError("GOST Type A font not found. Expected fonts/GOST type A.ttf or CAKESTAMP_FONT_GOST.")
+    return d.get("dejavuserif.ttf") or d.get("dejavusans.ttf") or fs[0]
 
 def glyph_geom(gs,name,steps):
     pen=FlattenPen(gs,steps);gs[name].draw(pen);pen._finish();polys=[]
