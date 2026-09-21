@@ -6,12 +6,12 @@ from .stamp_engine import build_stamp_from_image
 from .topper_engine import build_topper_from_text
 from . import blender_text_engine as _blender_text_engine
 from .stamp_fix_v235 import apply_fixes as _apply_stamp_v235_fixes
-from .stamp_font_fix_v241 import apply_fixes as _apply_stamp_font_v241_fixes
+from .stamp_font_fix_v242 import apply_fixes as _apply_stamp_font_v242_fixes
 
-# v2.4.0 geometry/crown fixes first, then v2.4.1 native TTF font handling.
+# v2.4.0 geometry/crown fixes first, then v2.4.2 thin true-TTF contour handling.
 # Topper remains on its existing engine.
 _apply_stamp_v235_fixes(_blender_text_engine)
-_apply_stamp_font_v241_fixes(_blender_text_engine)
+_apply_stamp_font_v242_fixes(_blender_text_engine)
 build_stamp_from_text_blender = _blender_text_engine.build_stamp_from_text_blender
 blender_available = _blender_text_engine.blender_available
 
@@ -26,7 +26,13 @@ def build_stamp_from_text(**kwargs):
 
     if wants_blender and blender_available():
         try:
-            logger.info("TEXT STAMP ENGINE: Blender | path=%s crown=%s font=%s", kwargs.get("text_path", "normal"), kwargs.get("add_crown", False), kwargs.get("font_choice", "classic"))
+            logger.info(
+                "TEXT STAMP ENGINE: Blender | path=%s crown=%s font=%s width=%s",
+                kwargs.get("text_path", "normal"),
+                kwargs.get("add_crown", False),
+                kwargs.get("font_choice", "classic"),
+                kwargs.get("line_width", .45),
+            )
             return build_stamp_from_text_blender(**kwargs)
         except Exception as exc:
             blender_error = exc
@@ -34,10 +40,6 @@ def build_stamp_from_text(**kwargs):
             if mode == "blender_strict":
                 raise
 
-    # stamp_v172 predates the crown keyword. Passing add_crown=False used to
-    # crash the whole job even though no crown was requested. Strip only that
-    # unsupported false option. If a crown really was requested, do not create
-    # a silently incorrect stamp without it: report the real Blender failure.
     legacy_kwargs = dict(kwargs)
     crown_requested = bool(legacy_kwargs.pop("add_crown", False))
     if crown_requested:
