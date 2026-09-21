@@ -6,12 +6,12 @@ from .stamp_engine import build_stamp_from_image
 from .topper_engine import build_topper_from_text
 from . import blender_text_engine as _blender_text_engine
 from .stamp_fix_v235 import apply_fixes as _apply_stamp_v235_fixes
-from .stamp_font_fix_v242 import apply_fixes as _apply_stamp_font_v242_fixes
+from .stamp_font_fix_v243 import apply_fixes as _apply_stamp_font_v243_fixes
 
-# v2.4.0 geometry/crown fixes first, then v2.4.2 thin true-TTF contour handling.
+# v2.4.0 geometry/crown fixes first, then v2.4.3 single-line true-TTF handling.
 # Topper remains on its existing engine.
 _apply_stamp_v235_fixes(_blender_text_engine)
-_apply_stamp_font_v242_fixes(_blender_text_engine)
+_apply_stamp_font_v243_fixes(_blender_text_engine)
 build_stamp_from_text_blender = _blender_text_engine.build_stamp_from_text_blender
 blender_available = _blender_text_engine.blender_available
 
