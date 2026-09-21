@@ -14,7 +14,7 @@ RUN apt-get update \
 
 ENV CAKESTAMP_FONT_CLASSIC=/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf
 ENV CAKESTAMP_FONT_COMIC="/usr/src/app/fonts/Comic Sans MS.ttf"
-ENV CAKESTAMP_FONT_GOST=/usr/src/app/fonts/GOST-type-AU.ttf
+ENV CAKESTAMP_FONT_GOST="/usr/src/app/fonts/GOST type A.ttf"
 ENV DATA_DIR=/app/data
 ENV STAMP_TEXT_ENGINE=auto
 ENV BLENDER_BIN=/usr/bin/blender
@@ -28,7 +28,9 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
 COPY . .
 
 RUN test -f "/usr/src/app/fonts/Comic Sans MS.ttf" \
-    && fc-scan "/usr/src/app/fonts/Comic Sans MS.ttf" >/dev/null
+    && test -f "/usr/src/app/fonts/GOST type A.ttf" \
+    && fc-scan "/usr/src/app/fonts/Comic Sans MS.ttf" >/dev/null \
+    && fc-scan "/usr/src/app/fonts/GOST type A.ttf" >/dev/null
 
 RUN mkdir -p /app/data/uploads /app/data/outputs && chmod -R 777 /app/data
 CMD ["python", "bot_v236.py"]
