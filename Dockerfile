@@ -2,9 +2,6 @@ FROM python:3.11-slim
 
 WORKDIR /usr/src/app
 
-# Blender is the primary stamp engine. Comic Neue is used as the deployable
-# Comic Sans-style font; an explicit Comic Sans MS TTF can override it through
-# CAKESTAMP_FONT_COMIC when available.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        blender \
@@ -28,4 +25,4 @@ COPY requirements.txt ./requirements.txt
 COPY . .
 
 RUN mkdir -p /app/data/uploads /app/data/outputs && chmod -R 777 /app/data
-CMD ["python", "bot_v182.py"]
+CMD ["python", "bot_v236.py"]
