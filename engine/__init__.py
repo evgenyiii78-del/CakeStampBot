@@ -6,9 +6,12 @@ from .stamp_engine import build_stamp_from_image
 from .topper_engine import build_topper_from_text
 from . import blender_text_engine as _blender_text_engine
 from .stamp_fix_v235 import apply_fixes as _apply_stamp_v235_fixes
+from .stamp_font_fix_v241 import apply_fixes as _apply_stamp_font_v241_fixes
 
-# v2.3.5: stamp-only fixes. Topper remains on its existing engine.
+# v2.4.0 geometry/crown fixes first, then v2.4.1 native TTF font handling.
+# Topper remains on its existing engine.
 _apply_stamp_v235_fixes(_blender_text_engine)
+_apply_stamp_font_v241_fixes(_blender_text_engine)
 build_stamp_from_text_blender = _blender_text_engine.build_stamp_from_text_blender
 blender_available = _blender_text_engine.blender_available
 
@@ -23,7 +26,7 @@ def build_stamp_from_text(**kwargs):
 
     if wants_blender and blender_available():
         try:
-            logger.info("TEXT STAMP ENGINE: Blender | path=%s crown=%s", kwargs.get("text_path", "normal"), kwargs.get("add_crown", False))
+            logger.info("TEXT STAMP ENGINE: Blender | path=%s crown=%s font=%s", kwargs.get("text_path", "normal"), kwargs.get("add_crown", False), kwargs.get("font_choice", "classic"))
             return build_stamp_from_text_blender(**kwargs)
         except Exception as exc:
             blender_error = exc
