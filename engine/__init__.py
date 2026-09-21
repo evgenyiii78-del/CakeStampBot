@@ -4,7 +4,13 @@ import os
 from .stamp_v172 import build_stamp_from_text as _build_stamp_from_text_legacy
 from .stamp_engine import build_stamp_from_image
 from .topper_engine import build_topper_from_text
-from .blender_text_engine import build_stamp_from_text_blender, blender_available
+from . import blender_text_engine as _blender_text_engine
+from .stamp_fix_v235 import apply_fixes as _apply_stamp_v235_fixes
+
+# v2.3.5: stamp-only fixes. Topper remains on its existing engine.
+_apply_stamp_v235_fixes(_blender_text_engine)
+build_stamp_from_text_blender = _blender_text_engine.build_stamp_from_text_blender
+blender_available = _blender_text_engine.blender_available
 
 logger = logging.getLogger("CakeStampEngine.Dispatch")
 
