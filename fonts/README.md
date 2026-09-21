@@ -1,3 +1,8 @@
 # Fonts
-Можно положить сюда свои TTF/OTF шрифты: Classic.ttf, Comic.ttf, GOST.ttf.
-В Docker уже ставятся DejaVu-шрифты, поэтому папка fonts необязательна.
+
+В репозитории используются следующие шрифты:
+- `DejaVuSerif.ttf` — Classic;
+- `Comic Sans MS.ttf` — Comic;
+- `GOST-type-AU.ttf` — GOST.
+
+В Docker Comic Sans MS берётся напрямую из `/usr/src/app/fonts/Comic Sans MS.ttf` через `CAKESTAMP_FONT_COMIC`.
