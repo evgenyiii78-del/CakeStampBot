@@ -56,7 +56,7 @@ def resolve_font(choice,folder):
     font_dir=Path(folder)
     bundled={
       "classic":font_dir/"DejaVuSerif.ttf",
-      "comic":font_dir/"Bad Script.ttf",
+      "comic":font_dir/"Comic Sans MS.ttf",
       "gost":font_dir/"GOST type A.ttf",
     }
     p=bundled.get(c)
@@ -71,13 +71,13 @@ def resolve_font(choice,folder):
     d={p.name.lower():p for p in fs}
     prefs={
       "classic":["dejavuserif.ttf","dejavusans.ttf"],
-      "comic":["bad script.ttf","badscript-regular.ttf","badscript.ttf"],
+      "comic":["comic sans ms.ttf","comic sans.ttf","bad script.ttf","badscript-regular.ttf","badscript.ttf"],
       "gost":["gost type a.ttf"]}
     for n in prefs.get(c,prefs["classic"]):
         if n in d:return d[n]
 
     if c=="comic":
-        raise FileNotFoundError("Bad Script font not found. Expected fonts/Bad Script.ttf or CAKESTAMP_FONT_HAND.")
+        raise FileNotFoundError("Comic Sans MS font not found. Expected fonts/Comic Sans MS.ttf or CAKESTAMP_FONT_HAND.")
     if c=="gost":
         raise FileNotFoundError("GOST Type A font not found. Expected fonts/GOST type A.ttf or CAKESTAMP_FONT_GOST.")
     return d.get("dejavuserif.ttf") or d.get("dejavusans.ttf") or fs[0]
@@ -113,5 +113,4 @@ def text_to_ttf_geometry(text,fonts_dir,font_choice,target_width_mm,target_heigh
         y+=step
     font.close()
     if not rows:raise ValueError("no TTF glyph geometry")
-    g=unary_union(rows);a,b,c2,d2=g.bounds;s=min(target_width_mm/max(c2-a,1e-6),target_height_mm/max(d2-b,1e-6));g=affinity.scale(g,xfact=s,yfact=s,origin=(0,0));a,b,c2,d2=g.bounds;g=affinity.translate(g,xoff=-(a+c2)/2,yoff=-(b+d2)/2);a,b,c2,d2=g.bounds
-    return TTFTextResult(g,c2-a,d2-b,str(fp),line_spacing)
+    g=unary_union(rows);a,b,c2,d2=g.bounds;s=min(target_width_mm/max(c2-a,1e-6),target_height_mm/max(d2-b,1e-6));g=affinity.scale(g,xfact=s,yfact=s,origin=(0,0));a,b,c2,d2=g.bounds;g=affinity.translate(g,xoff=-(a+c2)/2,yoff=-(b+d2)/2);return TTFTextResult(g,c2-a,d2-b,str(fp),line_spacing)
